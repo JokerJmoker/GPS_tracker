@@ -13,10 +13,10 @@ class SIM {
     String _buffer;
     bool _hasNewData;
 
-    void sendCommand(const String& cmd);
-
   public:
     SIM(int rxPin, int txPin);
+
+    void sendCommand(const String& cmd);
 
     void begin(long baudrate = 9600);
 
