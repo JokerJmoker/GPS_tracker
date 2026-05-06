@@ -1,17 +1,17 @@
 #include "TestManager.h"
 
 TestManager::TestManager(NEO* gps, SIM* sim800l, MPU* mpu6050) {
-  _gps = gps;
+  _gps = gps;           // Сохраняем указатели на внешние объекты
   _sim800l = sim800l;
   _mpu6050 = mpu6050;
   
-  _lastStatus = 0;
-  _lastPrint = 0;
-  _lastVoltageCheck = 0;
-  _lastMpuPrint = 0;
-  _cmdIndex = 0;
+  _lastStatus = 0;      // Время последнего вывода статуса GPS
+  _lastPrint = 0;       // Время последней отправки AT команды
+  _lastVoltageCheck = 0;// Время последней проверки напряжения
+  _lastMpuPrint = 0;    // Время последнего вывода MPU
+  _cmdIndex = 0;        // Индекс текущей команды для SIM
   
-  initCommands();
+  initCommands();       // Заполняем массив AT команд
 }
 
 void TestManager::initCommands() {
