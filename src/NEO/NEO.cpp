@@ -7,13 +7,22 @@ NEO::NEO(int rxPin, int txPin) {
   _gpsSerial = new SoftwareSerial(rxPin, txPin);
   _hasNewData = false;
   _buffer = "";
-  _enabled = true;           // По умолчанию включён
+  _lineBuffer = "";  // НОВОЕ: буфер для готовой строки
+  _enabled = true;
 }
 
 // Инициализация
 void NEO::begin(long baudrate) {
   if (_enabled) {
     _gpsSerial->begin(baudrate);
+    delay(100);
+    // Очищаем мусор после запуска
+    while (_gpsSerial->available()) {
+      _gpsSerial->read();
+    }
+    _buffer = "";
+    _lineBuffer = "";
+    _hasNewData = false;
   }
 }
 
@@ -21,13 +30,18 @@ void NEO::begin(long baudrate) {
 void NEO::enable() {
   _enabled = true;
   _gpsSerial->begin(9600);
+  delay(100);
+  while (_gpsSerial->available()) {
+    _gpsSerial->read();
+  }
 }
 
-// Выключить модуль (освобождает пины)
+// Выключить модуль
 void NEO::disable() {
   _enabled = false;
-  _gpsSerial->end();         // Закрываем порт
+  _gpsSerial->end();
   _buffer = "";
+  _lineBuffer = "";
   _hasNewData = false;
 }
 
@@ -51,29 +65,42 @@ bool NEO::available() {
   return _gpsSerial->available();
 }
 
-// Обновление данных (накопление строк)
+// ============= ИСПРАВЛЕННЫЙ МЕТОД update() =============
 void NEO::update() {
   if (!_enabled) return;
   
   while (_gpsSerial->available()) {
     char c = _gpsSerial->read();
+    
     if (c == '\n') {
+      // Нашли конец строки
+      _lineBuffer = _buffer;     // Сохраняем строку
+      _buffer = "";              // Очищаем для следующей
       _hasNewData = true;
-    } else if (c != '\r') {
+    } 
+    else if (c != '\r') {
+      // Добавляем символ в текущую строку
       _buffer += c;
+      
+      // Защита от переполнения (максимум 255 символов на строку)
+      if (_buffer.length() > 255) {
+        _buffer = "";
+      }
     }
   }
 }
 
-// Получение сырых данных
+// ============= ИСПРАВЛЕННЫЙ МЕТОД getRawData() =============
 String NEO::getRawData() {
   if (!_enabled) return "";
   
   if (_hasNewData) {
     _hasNewData = false;
-    String temp = _buffer;
-    _buffer = "";
-    return temp;
+    
+    // Проверяем, что строка валидная (начинается с $)
+    if (_lineBuffer.length() > 0 && _lineBuffer[0] == '$') {
+      return _lineBuffer;
+    }
   }
   return "";
 }

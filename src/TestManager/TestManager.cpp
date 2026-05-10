@@ -11,20 +11,7 @@ TestManager::TestManager(NEO* gps, SIM* sim800l, MPU* mpu6050) {
   _lastMpuPrint = 0;    // Время последнего вывода MPU
   _cmdIndex = 0;        // Индекс текущей команды для SIM
   
-  initCommands();       // Заполняем массив AT команд
-}
-
-void TestManager::initCommands() {
-  _commands[0] = "AT+CFUN=1";      // 1. ВКЛЮЧИТЬ радио
-  _commands[1] = "AT";             // 2. Проверка связи
-  _commands[2] = "AT+CPIN?";       // 3. Проверка SIM
-  _commands[3] = "AT+CCID";        // 4. ID SIM-карты
-  _commands[4] = "AT+CREG=1";      // 5. Включить регистрацию
-  _commands[5] = "AT+CREG?";       // 6. Статус регистрации
-  _commands[6] = "AT+COPS=0";      // 7. Автопоиск оператора
-  _commands[7] = "AT+COPS?";       // 8. Какой оператор найден
-  _commands[8] = "AT+CSQ";         // 9. Уровень сигнала
-  _commands[9] = "AT+CBC";         // 10. Напряжение
+  //initCommands();       // Заполняем массив AT команд
 }
 
 void TestManager::printHeader() {
@@ -83,48 +70,190 @@ void TestManager::updateModules() {
 
 void TestManager::processGPS() {
   #ifdef TEST_GPS
-    String data = _gps->getRawData();
-    if (data.length() > 0) {
-      Serial.println(data);
+    static unsigned long startTime = 0;
+    static bool firstRun = true;
+    
+    if (firstRun) {
+      startTime = millis();
+      firstRun = false;
+      Serial.println("[GPS] Starting. Wait 60 seconds for first fix...");
     }
     
-    if (millis() - _lastStatus >= 5000) {
-      _lastStatus = millis();
-      if (!_gps->available()) {
-        Serial.println("[GPS] Waiting for signal...");
-        Serial.println();
+    _gps->update();
+    
+    // Выводим данные (но реже, чтобы не загружать Serial)
+    static unsigned long lastOutput = 0;
+    if (millis() - lastOutput >= 2000) {  // Каждые 2 секунды
+      lastOutput = millis();
+      
+      String data;
+      while ((data = _gps->getRawData()).length() > 0) {
+        // Фильтруем только важные строки
+        if (data.startsWith("$GNGGA") || data.startsWith("$GPRMC")) {
+          Serial.println(data);
+        }
       }
+    }
+    
+    // Статус фикса
+    static unsigned long lastStatus = 0;
+    if (millis() - lastStatus >= 10000) {  // Каждые 10 секунд
+      lastStatus = millis();
+      unsigned long elapsed = (millis() - startTime) / 1000;
+      Serial.print("[GPS] Time: ");
+      Serial.print(elapsed);
+      Serial.println(" seconds - Waiting for 3D fix...");
     }
   #endif
 }
 
 void TestManager::processSIM() {
-  #ifdef TEST_SIM800L
-    // Основное тестирование (каждые 3 секунды)
-    if (millis() - _lastPrint >= 3000) {
-      _lastPrint = millis();
-      Serial.print("[SIM] Sending: ");
-      Serial.println(_commands[_cmdIndex]);
-      _sim800l->sendCommand(_commands[_cmdIndex]);
-      
-      _cmdIndex++;
-      if (_cmdIndex >= 10) _cmdIndex = 0;
+
+#ifdef TEST_SIM800L
+
+    static unsigned long lastCommand = 0;
+
+    static unsigned long waitStart = 0;
+
+    static int step = 0;
+
+    static bool waitingResponse = false;
+
+    const unsigned long COMMAND_DELAY = 2000;
+
+    const unsigned long RESPONSE_TIMEOUT = 30000;
+
+    _sim800l->update();
+
+    // =====================================================
+    // FULL RESPONSE
+    // =====================================================
+
+    String fullResponse = _sim800l->getFullResponse();
+
+    if (fullResponse.length() > 0) {
+
+        Serial.println("[SIM] Full response:");
+        Serial.println(fullResponse);
+
+        // Ответ получен
+        if (waitingResponse) {
+
+            waitingResponse = false;
+
+            lastCommand = millis();
+
+            // Проверяем ERROR
+            if (fullResponse.indexOf("ERROR") >= 0) {
+
+                Serial.println("[SIM] COMMAND FAILED");
+            }
+            else {
+
+                Serial.println("[SIM] COMMAND OK");
+            }
+
+            step++;
+        }
     }
-    
-    // Проверка напряжения каждые 30 секунд
-    if (millis() - _lastVoltageCheck >= 30000) {
-      _lastVoltageCheck = millis();
-      Serial.println("[SIM] Checking battery voltage...");
-      _sim800l->sendCommand("AT+CBC");
+
+    // =====================================================
+    // OPTIONAL LINE DEBUG
+    // =====================================================
+
+    String line;
+
+    while ((line = _sim800l->getData()).length() > 0) {
+
+        Serial.print("[SIM] Line: ");
+        Serial.println(line);
     }
-    
-    // Получаем и выводим ответы
-    String simData = _sim800l->getData();
-    if (simData.length() > 0) {
-      Serial.print("[SIM] Response: ");
-      Serial.println(simData);
+
+    // =====================================================
+    // RESPONSE TIMEOUT
+    // =====================================================
+
+    if (waitingResponse &&
+        millis() - waitStart >= RESPONSE_TIMEOUT) {
+
+        Serial.println("[SIM] RESPONSE TIMEOUT");
+
+        waitingResponse = false;
+
+        lastCommand = millis();
+
+        // Можно:
+        // 1. повторить команду
+        // 2. пропустить
+        // 3. рестартнуть SIM
+
+        Serial.print("[SIM] SKIPPING COMMAND: ");
+        
+        const char* failedCommands[] = {
+            "AT+CFUN=1",
+            "AT",
+            "AT+CPIN?",
+            "AT+CCID",
+            "AT+CREG=1",
+            "AT+CREG?",
+            "AT+COPS=0",
+            "AT+COPS?",
+            "AT+CSQ",
+            "AT+CBC"
+        };
+
+        Serial.println(failedCommands[step]);
+
+        step++;
     }
-  #endif
+
+    // =====================================================
+    // SEND COMMANDS
+    // =====================================================
+
+    if (!waitingResponse &&
+        millis() - lastCommand >= COMMAND_DELAY) {
+
+        const char* commands[] = {
+
+            //"AT+CFUN=1",
+            //"AT",
+            //"AT+CPIN?",
+            //"AT+CCID",
+            //"AT+CREG=1",
+            //"AT+CREG?",
+            //"AT+COPS=0",
+            //"AT+COPS?",
+            //"AT+CSQ",
+            "AT+CBATCHK=1",
+            "AT+CBC"
+        };
+
+        const int COMMAND_COUNT =
+            sizeof(commands) / sizeof(commands[0]);
+
+        if (step < COMMAND_COUNT) {
+
+            Serial.print("[SIM] Sending: ");
+            Serial.println(commands[step]);
+
+            _sim800l->sendCommand(commands[step]);
+
+            waitingResponse = true;
+
+            waitStart = millis();
+        }
+        else {
+
+            Serial.println("[SIM] TEST COMPLETE");
+
+            step = 0;
+
+            delay(5000);
+        }
+    }
+
+#endif
 }
 
 void TestManager::processMPU() {
