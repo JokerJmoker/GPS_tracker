@@ -76,33 +76,15 @@ void TestManager::processGPS() {
     if (firstRun) {
       startTime = millis();
       firstRun = false;
-      Serial.println("[GPS] Starting. Wait 60 seconds for first fix...");
+      Serial.println("[GPS] Starting...");
     }
     
     _gps->update();
     
-    // Выводим данные (но реже, чтобы не загружать Serial)
-    static unsigned long lastOutput = 0;
-    if (millis() - lastOutput >= 2000) {  // Каждые 2 секунды
-      lastOutput = millis();
-      
-      String data;
-      while ((data = _gps->getRawData()).length() > 0) {
-        // Фильтруем только важные строки
-        if (data.startsWith("$GNGGA") || data.startsWith("$GPRMC")) {
-          Serial.println(data);
-        }
-      }
-    }
-    
-    // Статус фикса
-    static unsigned long lastStatus = 0;
-    if (millis() - lastStatus >= 10000) {  // Каждые 10 секунд
-      lastStatus = millis();
-      unsigned long elapsed = (millis() - startTime) / 1000;
-      Serial.print("[GPS] Time: ");
-      Serial.print(elapsed);
-      Serial.println(" seconds - Waiting for 3D fix...");
+    // Output all raw GPS data
+    String data;
+    while ((data = _gps->getRawData()).length() > 0) {
+      Serial.println(data);
     }
   #endif
 }
@@ -216,15 +198,15 @@ void TestManager::processSIM() {
 
         const char* commands[] = {
 
-            //"AT+CFUN=1",
-            //"AT",
-            //"AT+CPIN?",
-            //"AT+CCID",
-            //"AT+CREG=1",
-            //"AT+CREG?",
-            //"AT+COPS=0",
-            //"AT+COPS?",
-            //"AT+CSQ",
+            "AT+CFUN=1",
+            "AT",
+            "AT+CPIN?",
+            "AT+CCID",
+            "AT+CREG=1",
+            "AT+CREG?",
+            "AT+COPS=0",
+            "AT+COPS?",
+            "AT+CSQ",
             "AT+CBATCHK=1",
             "AT+CBC"
         };
