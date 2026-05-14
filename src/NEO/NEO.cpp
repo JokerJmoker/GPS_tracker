@@ -1,32 +1,33 @@
 #include "NEO.h"
 
-// Конструктор
 NEO::NEO(int rxPin, int txPin) {
   _rxPin = rxPin;
   _txPin = txPin;
   _gpsSerial = new SoftwareSerial(rxPin, txPin);
   _hasNewData = false;
-  _buffer = "";
-  _lineBuffer = "";  // НОВОЕ: буфер для готовой строки
+  _bufferIndex = 0;
+  _lineIndex = 0;
   _enabled = true;
+  
+  memset(_buffer, 0, sizeof(_buffer));
+  memset(_lineBuffer, 0, sizeof(_lineBuffer));
 }
 
-// Инициализация
 void NEO::begin(long baudrate) {
   if (_enabled) {
     _gpsSerial->begin(baudrate);
     delay(100);
-    // Очищаем мусор после запуска
     while (_gpsSerial->available()) {
       _gpsSerial->read();
     }
-    _buffer = "";
-    _lineBuffer = "";
+    _bufferIndex = 0;
+    _lineIndex = 0;
     _hasNewData = false;
+    memset(_buffer, 0, sizeof(_buffer));
+    memset(_lineBuffer, 0, sizeof(_lineBuffer));
   }
 }
 
-// Включить модуль
 void NEO::enable() {
   _enabled = true;
   _gpsSerial->begin(9600);
@@ -36,21 +37,18 @@ void NEO::enable() {
   }
 }
 
-// Выключить модуль
 void NEO::disable() {
   _enabled = false;
   _gpsSerial->end();
-  _buffer = "";
-  _lineBuffer = "";
+  _bufferIndex = 0;
+  _lineIndex = 0;
   _hasNewData = false;
 }
 
-// Проверка, включён ли модуль
 bool NEO::isEnabled() {
   return _enabled;
 }
 
-// Установить состояние включения
 void NEO::setEnabled(bool enabled) {
   if (enabled && !_enabled) {
     enable();
@@ -59,13 +57,11 @@ void NEO::setEnabled(bool enabled) {
   }
 }
 
-// Проверка наличия данных
 bool NEO::available() {
   if (!_enabled) return false;
   return _gpsSerial->available();
 }
 
-// ============= ИСПРАВЛЕННЫЙ МЕТОД update() =============
 void NEO::update() {
   if (!_enabled) return;
   
@@ -73,39 +69,66 @@ void NEO::update() {
     char c = _gpsSerial->read();
     
     if (c == '\n') {
-      // Нашли конец строки
-      _lineBuffer = _buffer;     // Сохраняем строку
-      _buffer = "";              // Очищаем для следующей
+      // Копируем буфер в lineBuffer
+      _lineIndex = _bufferIndex;
+      memcpy(_lineBuffer, _buffer, _bufferIndex);
+      _lineBuffer[_lineIndex] = '\0';  // null-terminator
+      
+      _bufferIndex = 0;
+      memset(_buffer, 0, sizeof(_buffer));
       _hasNewData = true;
     } 
-    else if (c != '\r') {
-      // Добавляем символ в текущую строку
-      _buffer += c;
-      
-      // Защита от переполнения (максимум 255 символов на строку)
-      if (_buffer.length() > 255) {
-        _buffer = "";
-      }
+    else if (c != '\r' && _bufferIndex < 254) {
+      _buffer[_bufferIndex++] = c;
+    }
+    else if (_bufferIndex >= 254) {
+      // Переполнение - сбрасываем буфер
+      _bufferIndex = 0;
+      memset(_buffer, 0, sizeof(_buffer));
     }
   }
 }
 
-// ============= ИСПРАВЛЕННЫЙ МЕТОД getRawData() =============
-String NEO::getRawData() {
-  if (!_enabled) return "";
+// Возвращает указатель на внутренний буфер (НЕ копирует)
+const char* NEO::getRawData() {
+  if (!_enabled || !_hasNewData) return nullptr;
   
-  if (_hasNewData) {
+  if (_lineIndex > 0 && _lineBuffer[0] == '$') {
     _hasNewData = false;
-    
-    // Проверяем, что строка валидная (начинается с $)
-    if (_lineBuffer.length() > 0 && _lineBuffer[0] == '$') {
-      return _lineBuffer;
-    }
+    return _lineBuffer;
   }
-  return "";
+  
+  _hasNewData = false;
+  return nullptr;
 }
 
-// Получить указатель на SoftwareSerial
+// Копирует данные в предоставленный буфер (безопасно)
+void NEO::getRawDataAsString(char* output, size_t maxLen) {
+  if (!output || maxLen == 0) return;
+  
+  const char* data = getRawData();
+  if (data) {
+    strncpy(output, data, maxLen - 1);
+    output[maxLen - 1] = '\0';
+  } else {
+    output[0] = '\0';
+  }
+}
+
+// Прямой вывод в Serial (экономит RAM полностью)
+void NEO::printRawData(HardwareSerial& serial) {
+  if (!_enabled || !_hasNewData) return;
+  
+  if (_lineIndex > 0 && _lineBuffer[0] == '$') {
+    // Выводим символ за символом
+    for (uint8_t i = 0; i < _lineIndex; i++) {
+      serial.write(_lineBuffer[i]);
+    }
+    serial.write('\n');  // Добавляем перевод строки
+    _hasNewData = false;
+  }
+}
+
 SoftwareSerial* NEO::getSerial() {
   return _gpsSerial;
 }

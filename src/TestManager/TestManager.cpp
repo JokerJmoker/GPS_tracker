@@ -81,11 +81,8 @@ void TestManager::processGPS() {
     
     _gps->update();
     
-    // Output all raw GPS data
-    String data;
-    while ((data = _gps->getRawData()).length() > 0) {
-      Serial.println(data);
-    }
+    // Прямой вывод - самый эффективный
+    _gps->printRawData(Serial);
   #endif
 }
 

@@ -9,11 +9,13 @@ class NEO {
     SoftwareSerial* _gpsSerial;  // Указатель на объект программного UART для связи с GPS
     int _rxPin;                   // Пин для приёма данных (RX) от GPS модуля
     int _txPin;                   // Пин для передачи данных (TX) в GPS модуль
-    String _buffer;               // Буфер для накопления строки NMEA до символа \n
+    char _buffer[256];          // Буфер для накопления строки (char вместо String)
+    char _lineBuffer[256];      // Буфер для готовой строки
+    uint8_t _bufferIndex;
+    uint8_t _lineIndex;           // Буфер для накопления строки NMEA до символа \n
     bool _hasNewData;             // Флаг наличия новой полной строки данных
     bool _enabled;                // Флаг включения/выключения модуля (логическое, не физическое)
-    String _lineBuffer;   // НОВОЕ: буфер для готовой строки
-    
+  
   public:
     // Конструктор - сохраняет пины и создаёт объект SoftwareSerial
     NEO(int rxPin, int txPin);
@@ -39,9 +41,14 @@ class NEO {
     // Обновление данных - чтение из UART и накопление строк (вызывать в loop)
     void update();
     
-    // Получение сырых данных - возвращает одну полную строку NMEA
-    String getRawData();
+    const char* getRawData();
+
+    // Для вывода в терминал - копирует в предоставленный буфер
+    void getRawDataAsString(char* output, size_t maxLen);
     
+    // Альтернатива: сразу выводит в Serial (минимально памяти)
+    void printRawData(HardwareSerial& serial = Serial);
+
     // Получить указатель на SoftwareSerial для низкоуровневого доступа
     SoftwareSerial* getSerial();
 };
