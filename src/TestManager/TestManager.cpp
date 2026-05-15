@@ -12,6 +12,7 @@ TestManager::TestManager(NEO* gps, SIM* sim800l, MPU* mpu6050) {
     _lastMpuPrint = 0;
     _cmdIndex = 0;
     _gpsHasFix = false;
+    _pipelineState = WAIT_GPS;
     _gpsUrl[0] = '\0';
 }
 
@@ -68,12 +69,37 @@ void TestManager::initModules() {
 
 void TestManager::updateModules() {
 
-#ifdef TEST_GPS
-    _gps->update();
-#endif
+#ifdef TEST_PIPELINE_MODE
 
-#ifdef TEST_SIM800L
-    _sim800l->update();
+    switch (_pipelineState)
+    {
+        case WAIT_GPS:
+
+        #ifdef TEST_GPS
+            _gps->update();
+        #endif
+
+        break;
+
+        case SEND_SMS:
+
+        #ifdef TEST_SIM800L
+            _sim800l->update();
+        #endif
+
+        break;
+    }
+
+#else
+
+    #ifdef TEST_GPS
+        _gps->update();
+    #endif
+
+    #ifdef TEST_SIM800L
+        _sim800l->update();
+    #endif
+
 #endif
 
 #ifdef TEST_MPU6050
@@ -90,7 +116,7 @@ void TestManager::processGPS() {
 #ifdef TEST_GPS
 
     // обновляем GPS
-    _gps->update();
+    //_gps->update();
 
     // =========================================
     // MOCK MODE
@@ -122,6 +148,7 @@ void TestManager::processGPS() {
         buildYandexURL(lat, lon, _gpsUrl, sizeof(_gpsUrl));
 
         _gpsHasFix = true;
+        _pipelineState = SEND_SMS;
 
         Serial.println();
         Serial.println("===== GPS PARSER TEST =====");
@@ -141,6 +168,7 @@ void TestManager::processGPS() {
     else {
 
         Serial.println("[GPS] parse failed");
+        _gpsHasFix = false;  // Сбрасываем флаг
     }
 
     return;
@@ -179,6 +207,7 @@ void TestManager::processGPS() {
     float lon = 0;
 
     bool ok = parseRMC(data, lat, lon);
+    
 
     // =========================================
     // ЕСЛИ FIX ЕСТЬ
@@ -188,6 +217,7 @@ void TestManager::processGPS() {
         buildYandexURL(lat, lon, _gpsUrl, sizeof(_gpsUrl));
 
         _gpsHasFix = true;
+        _pipelineState = SEND_SMS;
 
         Serial.println("===== GPS RESULT =====");
 
@@ -250,7 +280,7 @@ void TestManager::processSIM() {
 #if GPS_MOCK_MODE == 1
 
     static bool sms_sent = false;
-
+// Проверяем наличие GPS fix и что SMS еще не отправлен
     if (!_gpsHasFix || sms_sent) {
         return;
     }
@@ -280,6 +310,10 @@ void TestManager::processSIM() {
 
     sms_sent = true;
     _gpsHasFix = false;
+    // ВОЗВРАТ К GPS
+    _pipelineState = WAIT_GPS;
+
+    Serial.println("[PIPELINE] RETURN TO GPS");
 
     return;
 
@@ -292,7 +326,7 @@ void TestManager::processSIM() {
     const unsigned long COMMAND_DELAY = 2000;
     const unsigned long RESPONSE_TIMEOUT = 30000;
 
-    _sim800l->update();
+    //_sim800l->update();
 
     // =====================================
     // FULL RESPONSE
@@ -402,6 +436,12 @@ void TestManager::processSIM() {
             Serial.println(F("[SIM] TEST COMPLETE"));
 
             step = 0;
+            _gpsHasFix = false;
+
+            // ВОЗВРАТ К GPS
+            _pipelineState = WAIT_GPS;
+
+            Serial.println(F("[PIPELINE] RETURN TO GPS"));
             delay(5000);
         }
     }
@@ -451,18 +491,85 @@ void TestManager::begin() {
 
 void TestManager::update() {
 
-    updateModules();   // <-- ТОЛЬКО ТУТ update всех модулей
+    updateModules();
+
+    // =====================================
+    // DEBUG PIPELINE STATE
+    // =====================================
+
+    static unsigned long lastDebug = 0;
+
+    if (millis() - lastDebug >= 1000) {
+
+        lastDebug = millis();
+
+        Serial.println();
+        Serial.println(F("========== PIPELINE DEBUG =========="));
+
+        // ---------------------------------
+        // STATE
+        // ---------------------------------
+
+        Serial.print(F("[STATE] "));
+
+        switch (_pipelineState)
+        {
+            case WAIT_GPS:
+                Serial.println(F("WAIT_GPS"));
+                break;
+
+            case SEND_SMS:
+                Serial.println(F("SEND_SMS"));
+                break;
+
+            default:
+                Serial.println(F("UNKNOWN"));
+                break;
+        }
+
+        // ---------------------------------
+        // GPS FIX
+        // ---------------------------------
+
+        Serial.print(F("[GPS FIX] "));
+        Serial.println(_gpsHasFix ? F("TRUE") : F("FALSE"));
+
+        // ---------------------------------
+        // URL CONTENT
+        // ---------------------------------
+
+        Serial.print(F("[URL] "));
+        Serial.println(_gpsUrl);
+
+        // ---------------------------------
+        // URL LENGTH
+        // ---------------------------------
+
+        Serial.print(F("[URL LEN] "));
+        Serial.println(strlen(_gpsUrl));
+
+        // ---------------------------------
+        // MEMORY ADDRESS
+        // ---------------------------------
+
+        Serial.print(F("[URL ADDR] 0x"));
+        Serial.println((uintptr_t)_gpsUrl, HEX);
+
+        Serial.println(F("===================================="));
+        Serial.println();
+    }
 
 #if TEST_PIPELINE_MODE
 
-    // STEP 1: GPS
-    if (!_gpsHasFix) {
-        processGPS();
-    }
+    switch (_pipelineState)
+    {
+        case WAIT_GPS:
+            processGPS();
+            break;
 
-    // STEP 2: SIM
-    if (_gpsHasFix) {
-        processSIM();
+        case SEND_SMS:
+            processSIM();
+            break;
     }
 
 #else

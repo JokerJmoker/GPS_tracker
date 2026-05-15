@@ -50,6 +50,17 @@ class TestManager {
     void processSIM();
     void processMPU();
 
+    
+    // =========================
+    // Pipeline
+    // =========================
+    enum PipelineState {
+    WAIT_GPS,
+    SEND_SMS
+    };
+
+    PipelineState _pipelineState;
+
   public:
 
     TestManager(NEO* gps, SIM* sim800l, MPU* mpu6050);
