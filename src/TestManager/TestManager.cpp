@@ -69,21 +69,69 @@ void TestManager::updateModules() {
 }
 
 void TestManager::processGPS() {
-  #ifdef TEST_GPS
-    static unsigned long startTime = 0;
-    static bool firstRun = true;
-    
-    if (firstRun) {
-      startTime = millis();
-      firstRun = false;
-      Serial.println("[GPS] Starting...");
-    }
-    
+
+#ifdef TEST_GPS
+
+    static uint32_t lastPrint = 0;
+
     _gps->update();
-    
-    // Прямой вывод - самый эффективный
-    _gps->printRawData(Serial);
-  #endif
+
+    const char* data = nullptr;
+
+    // =========================
+    // SELECT MODE
+    // =========================
+    if (GPS_MOCK_MODE == 1) {
+
+        data = "$GNRMC,123519,A,5530.1234,N,03736.1234,E,0.13,309.62,120598,,,A*7C";
+
+    } 
+    else if (GPS_MOCK_MODE == 0) {
+
+        data = _gps->getRawData();
+
+    } 
+    else {
+
+        _gps->printRawData(Serial);
+        return;
+    }
+
+    // =========================
+    // RATE LIMIT
+    // =========================
+    if (millis() - lastPrint < 1000) return;
+    lastPrint = millis();
+
+    // =========================
+    // DEBUG CHECK (ВАЖНО!)
+    // =========================
+    Serial.print("MODE=");
+    Serial.println(GPS_MOCK_MODE);
+
+    Serial.print("DATA=");
+    Serial.println(data ? data : "NULL");
+
+    // =========================
+    // PARSE
+    // =========================
+    if (data != nullptr && data[0] == '$') {
+
+        float lat = 0;
+        float lon = 0;
+
+        if (parseRMC(data, lat, lon)) {
+
+            char url[120];
+            buildYandexURL(lat, lon, url, sizeof(url));
+
+            Serial.println(url);
+        } else {
+            Serial.println("[GPS] parse failed");
+        }
+    }
+
+#endif
 }
 
 void TestManager::processSIM() {
