@@ -150,33 +150,66 @@ void TestManager::processGPS() {
 
     const char* data = _gps->getRawData();
 
-    if (data && data[0] == '$') {
+    // нет данных
+    if (data == nullptr) {
+        return;
+    }
 
-        float lat = 0;
-        float lon = 0;
+    // не NMEA
+    if (data[0] != '$') {
+        return;
+    }
 
-        if (parseRMC(data, lat, lon)) {
+    // =========================================
+    // ОБРАБАТЫВАЕМ ТОЛЬКО RMC
+    // =========================================
+    if (strncmp(data, "$GNRMC", 6) != 0 &&
+        strncmp(data, "$GPRMC", 6) != 0) {
 
-            Serial.println();
-            Serial.println("===== INPUT NMEA =====");
-            Serial.println(data);
-            Serial.println("======================");
+        return;
+    }
 
-            char url[120];
+    Serial.println();
+    Serial.println("===== INPUT RMC =====");
+    Serial.println(data);
+    Serial.println("=====================");
 
-            buildYandexURL(lat, lon, url, sizeof(url));
+    float lat = 0;
+    float lon = 0;
 
-            Serial.print("URL: ");
-            Serial.println(url);
-            Serial.println();
-        }
+    // =========================================
+    // FIX OK
+    // =========================================
+    if (parseRMC(data, lat, lon)) {
+
+        char url[120];
+
+        buildYandexURL(lat, lon, url, sizeof(url));
+
+        Serial.print("LAT: ");
+        Serial.println(lat, 6);
+
+        Serial.print("LON: ");
+        Serial.println(lon, 6);
+
+        Serial.print("URL: ");
+        Serial.println(url);
+
+        Serial.println("[GPS] FIX OK");
+        Serial.println();
+    }
+    // =========================================
+    // NO FIX
+    // =========================================
+    else {
+
+        Serial.println("[GPS] NO FIX");
+        Serial.println("[GPS] Waiting satellites...");
+        Serial.println();
     }
 
     return;
 
-    // =========================================
-    // RAW GPS MODE
-    // =========================================
 #else
 
     const char* data = _gps->getRawData();
