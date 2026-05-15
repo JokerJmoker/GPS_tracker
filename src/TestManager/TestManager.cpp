@@ -119,9 +119,9 @@ void TestManager::processGPS() {
 
     if (parseRMC(data, lat, lon)) {
 
-        char url[120];
+        buildYandexURL(lat, lon, _gpsUrl, sizeof(_gpsUrl));
 
-        buildYandexURL(lat, lon, url, sizeof(url));
+        _gpsHasFix = true;
 
         Serial.println();
         Serial.println("===== GPS PARSER TEST =====");
@@ -133,7 +133,7 @@ void TestManager::processGPS() {
         Serial.println(lon, 6);
 
         Serial.print("URL: ");
-        Serial.println(url);
+        Serial.println(_gpsUrl);
 
         Serial.println("===========================");
         Serial.println();
@@ -185,8 +185,9 @@ void TestManager::processGPS() {
     // =========================================
     if (ok) {
 
-        char url[120];
-        buildYandexURL(lat, lon, url, sizeof(url));
+        buildYandexURL(lat, lon, _gpsUrl, sizeof(_gpsUrl));
+
+        _gpsHasFix = true;
 
         Serial.println("===== GPS RESULT =====");
 
@@ -197,7 +198,7 @@ void TestManager::processGPS() {
         Serial.println(lon, 6);
 
         Serial.print("URL: ");
-        Serial.println(url);
+        Serial.println(_gpsUrl);
 
         Serial.println("[GPS] FIX OK");
         Serial.println();
@@ -233,7 +234,6 @@ void TestManager::processGPS() {
 // =====================================================
 // SIM PROCESS
 // =====================================================
-
 void TestManager::processSIM() {
 
 #ifdef TEST_SIM800L
@@ -243,6 +243,51 @@ void TestManager::processSIM() {
 
     static int step = 0;
     static bool waitingResponse = false;
+
+    // ==============================
+    // GPS → SIM COMMON BUFFER (MOCK)
+    // ==============================
+#if GPS_MOCK_MODE == 1
+
+    static bool sms_sent = false;
+
+    if (!_gpsHasFix || sms_sent) {
+        return;
+    }
+
+    Serial.println();
+    Serial.println("===== GSM MODULE ACTIVE =====");
+    Serial.println("[SIM] GPS DATA RECEIVED");
+    Serial.println("[SIM] Preparing SMS...");
+    Serial.println();
+
+    Serial.println("[SIM] AT");
+    Serial.println("OK");
+
+    Serial.println("[SIM] AT+CMGF=1");
+    Serial.println("OK");
+
+    Serial.println("[SIM] AT+CMGS=\"+79991234567\"");
+    Serial.println(">");
+
+    Serial.print("[SIM] MESSAGE: ");
+    Serial.println(_gpsUrl);
+
+    Serial.println((char)26);
+    Serial.println("OK");
+
+    Serial.println("[SIM] SMS SENT (MOCK)");
+
+    sms_sent = true;
+    _gpsHasFix = false;
+
+    return;
+
+#endif
+
+    // ==============================
+    // REAL SIM800L STATE MACHINE
+    // ==============================
 
     const unsigned long COMMAND_DELAY = 2000;
     const unsigned long RESPONSE_TIMEOUT = 30000;
@@ -266,11 +311,8 @@ void TestManager::processSIM() {
             lastCommand = millis();
 
             if (fullResponse.indexOf("ERROR") >= 0) {
-
                 Serial.println(F("[SIM] COMMAND FAILED"));
-            }
-            else {
-
+            } else {
                 Serial.println(F("[SIM] COMMAND OK"));
             }
 
@@ -285,7 +327,6 @@ void TestManager::processSIM() {
     String line;
 
     while ((line = _sim800l->getData()).length() > 0) {
-
         Serial.print(F("[SIM] Line: "));
         Serial.println(line);
     }
@@ -300,7 +341,6 @@ void TestManager::processSIM() {
         Serial.println(F("[SIM] RESPONSE TIMEOUT"));
 
         waitingResponse = false;
-
         lastCommand = millis();
 
         const char* failedCommands[] = {
@@ -362,7 +402,6 @@ void TestManager::processSIM() {
             Serial.println(F("[SIM] TEST COMPLETE"));
 
             step = 0;
-
             delay(5000);
         }
     }
@@ -412,13 +451,25 @@ void TestManager::begin() {
 
 void TestManager::update() {
 
-    updateModules();
+    updateModules();   // <-- ТОЛЬКО ТУТ update всех модулей
+
+#if TEST_PIPELINE_MODE
+
+    // STEP 1: GPS
+    if (!_gpsHasFix) {
+        processGPS();
+    }
+
+    // STEP 2: SIM
+    if (_gpsHasFix) {
+        processSIM();
+    }
+
+#else
 
     processGPS();
     processSIM();
     processMPU();
 
-#ifdef TEST_EEPROM
-    // EEPROM logic here
 #endif
 }
