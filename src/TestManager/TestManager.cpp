@@ -69,37 +69,14 @@ void TestManager::initModules() {
 
 void TestManager::updateModules() {
 
-#ifdef TEST_PIPELINE_MODE
-
-    switch (_pipelineState)
-    {
-        case WAIT_GPS:
-
-        #ifdef TEST_GPS
-            _gps->update();
-        #endif
-
-        break;
-
-        case SEND_SMS:
-
-        #ifdef TEST_SIM800L
-            _sim800l->update();
-        #endif
-
-        break;
-    }
-
-#else
-
-    #ifdef TEST_GPS
+#ifdef TEST_GPS
+    if (_pipelineState == WAIT_GPS || !TEST_PIPELINE_MODE)
         _gps->update();
-    #endif
+#endif
 
-    #ifdef TEST_SIM800L
-        _sim800l->update();
-    #endif
-
+#ifdef TEST_SIM800L
+    // ВСЕГДА читаем UART
+    _sim800l->update();
 #endif
 
 #ifdef TEST_MPU6050
