@@ -37,9 +37,9 @@ bool parseRMC(const char* nmea, float &lat, float &lon) {
     if (!status || status[0] != 'A') return false;
     if (!latStr || !lonStr) return false;
 
-    float latRaw = atof(latStr);
-    float lonRaw = atof(lonStr);
-
+    float latRaw = strtod(latStr, nullptr);
+    float lonRaw = strtod(lonStr, nullptr);
+    // или atof
     int latDeg = latRaw / 100;
     float latMin = latRaw - latDeg * 100;
 
@@ -56,8 +56,16 @@ bool parseRMC(const char* nmea, float &lat, float &lon) {
 }
 
 void buildYandexURL(float lat, float lon, char* out, int size) {
+
+    char latBuf[20];
+    char lonBuf[20];
+
+    dtostrf(lat, 0, 6, latBuf);
+    dtostrf(lon, 0, 6, lonBuf);
+
     snprintf(out, size,
-        "https://yandex.ru/maps/?pt=%.6f,%.6f&z=18",
-        lon, lat
+        "https://yandex.ru/maps/?pt=%s,%s&z=18",
+        lonBuf,
+        latBuf
     );
 }

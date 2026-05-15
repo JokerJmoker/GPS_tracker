@@ -11,6 +11,8 @@ TestManager::TestManager(NEO* gps, SIM* sim800l, MPU* mpu6050) {
     _lastVoltageCheck = 0;
     _lastMpuPrint = 0;
     _cmdIndex = 0;
+    _gpsHasFix = false;
+    _gpsUrl[0] = '\0';
 }
 
 // =====================================================
@@ -104,7 +106,7 @@ void TestManager::processGPS() {
     lastMock = millis();
 
     const char* data =
-        "$GNRMC,123519,A,5530.1234,N,03736.1234,E,0.13,309.62,120598,,,A*7C";
+        "$GNRMC,123519,A,5545.9469,N,3741.1349,E,0.13,309.62,150526,,,A*7C";
 
     // ===== ВЫВОД ИСХОДНОЙ СТРОКИ =====
     Serial.println();
@@ -150,41 +152,43 @@ void TestManager::processGPS() {
 
     const char* data = _gps->getRawData();
 
-    // нет данных
-    if (data == nullptr) {
-        return;
-    }
-
-    // не NMEA
-    if (data[0] != '$') {
+    if (data == nullptr || data[0] != '$') {
         return;
     }
 
     // =========================================
-    // ОБРАБАТЫВАЕМ ТОЛЬКО RMC
+    // общий фильтр RMC (оставляем только нужное)
     // =========================================
     if (strncmp(data, "$GNRMC", 6) != 0 &&
         strncmp(data, "$GPRMC", 6) != 0) {
-
         return;
     }
 
+    // =========================================
+    // ПЕЧАТЬ ВХОДА (одинаково для всех режимов)
+    // =========================================
     Serial.println();
     Serial.println("===== INPUT RMC =====");
     Serial.println(data);
     Serial.println("=====================");
 
+    // =========================================
+    // ПАРСИНГ (единый буфер обработки)
+    // =========================================
     float lat = 0;
     float lon = 0;
 
+    bool ok = parseRMC(data, lat, lon);
+
     // =========================================
-    // FIX OK
+    // ЕСЛИ FIX ЕСТЬ
     // =========================================
-    if (parseRMC(data, lat, lon)) {
+    if (ok) {
 
         char url[120];
-
         buildYandexURL(lat, lon, url, sizeof(url));
+
+        Serial.println("===== GPS RESULT =====");
 
         Serial.print("LAT: ");
         Serial.println(lat, 6);
@@ -198,8 +202,9 @@ void TestManager::processGPS() {
         Serial.println("[GPS] FIX OK");
         Serial.println();
     }
+
     // =========================================
-    // NO FIX
+    // ЕСЛИ FIX НЕТ
     // =========================================
     else {
 
