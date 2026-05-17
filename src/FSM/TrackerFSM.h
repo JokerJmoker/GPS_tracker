@@ -2,13 +2,10 @@
 
 #include <Arduino.h>
 
+#include "../Config.h"
 #include "../NEO/NEO.h"
 #include "../SIM/SIM.h"
 #include "../MPU/MPU.h"
-
-// ============================================
-// FSM STATES
-// ============================================
 
 enum class TrackerState
 {
@@ -26,51 +23,33 @@ enum class TrackerState
     GSM_POWER_OFF,
 
     SLEEP,
-
     ERROR_STATE
 };
 
-// ============================================
-// TRACKER FSM
-// ============================================
+enum class RunMode
+{
+    DEBUG,
+    TRACKER,
+    SLEEP
+};
 
 class TrackerFSM
 {
-private:
-
-    TrackerState _state;
-
-    unsigned long _stateStartTime;
-
-    NEO* _gps;
-    SIM* _sim;
-    MPU* _mpu;
-
-    // GPS DATA
-    char _gpsRawBuffer[128];
-
-    float _latitude;
-    float _longitude;
-
-    // READY URL
-    char _urlBuffer[128];
-
 public:
 
-    TrackerFSM(
-        NEO* gps,
-        SIM* sim,
-        MPU* mpu
-    );
+    TrackerFSM(NEO* gps, SIM* sim, MPU* mpu);
 
     void begin();
-
     void update();
 
 private:
 
     void changeState(TrackerState newState);
+    void printState(TrackerState state);
 
+    void loadConfig();
+
+    // handlers
     void handleBoot();
 
     void handleGPSPowerOn();
@@ -85,8 +64,31 @@ private:
     void handleGSMPowerOff();
 
     void handleSleep();
-
     void handleError();
 
-    void printState(TrackerState state);
+private:
+
+    NEO* _gps;
+    SIM* _sim;
+    MPU* _mpu;
+
+    TrackerState _state;
+    RunMode _mode;
+
+    uint32_t _stateStartTime;
+
+    // runtime config from defines
+    bool _gpsEnabled;
+    bool _simEnabled;
+    bool _mpuEnabled;
+
+    bool _gpsMockMode;
+    bool _pipelineMode;
+
+    // buffers
+    char _gpsRawBuffer[128];
+    char _urlBuffer[160];
+
+    float _latitude;
+    float _longitude;
 };
