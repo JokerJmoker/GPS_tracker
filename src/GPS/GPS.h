@@ -1,10 +1,10 @@
-#ifndef NEO_H
-#define NEO_H
+#ifndef GPS_H
+#define GPS_H
 
 #include <Arduino.h>
 #include <SoftwareSerial.h>
 
-class NEO {
+class GPS {
   private:
     SoftwareSerial* _gpsSerial;  // Указатель на объект программного UART для связи с GPS
     int _rxPin;                   // Пин для приёма данных (RX) от GPS модуля
@@ -18,7 +18,7 @@ class NEO {
   
   public:
     // Конструктор - сохраняет пины и создаёт объект SoftwareSerial
-    NEO(int rxPin, int txPin);
+    GPS(int rxPin, int txPin);
     
     // Инициализация - запускает UART с заданной скоростью (по умолчанию 9600)
     void begin(long baudrate = 9600);

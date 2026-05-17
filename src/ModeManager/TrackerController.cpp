@@ -1,132 +1,139 @@
-//TrackerController.cpp
+// =====================================================
+// FILE: src/ModeManager/TrackerController.cpp
+// =====================================================
+
 #include "TrackerController.h"
 
-TrackerController::TrackerController(NEO* gps, SIM* sim, MPU* mpu) {
-  _gps = gps;
-  _sim = sim;
-  _mpu = mpu;
-  
-  _gpsDataReady = false;
-  _simCommandsDone = false;
-  _lastCommandTime = 0;
-  _commandIndex = 0;
-  _mpuMovementDetected = false;
+// =====================================================
+// CONSTRUCTOR
+// =====================================================
+
+TrackerController::TrackerController(
+    GPS_FSM* gps,
+    GSM_FSM* gsm,
+    MPU_FSM* mpu
+)
+{
+    _gps = gps;
+    _gsm = gsm;
+    _mpu = mpu;
+
+    _state = TrackerState::IDLE;
 }
 
-void TrackerController::begin() {
-  resetSimCommandSequence();
+// =====================================================
+// BEGIN
+// =====================================================
+
+void TrackerController::begin()
+{
+    Serial.println(F("[TRACKER] BEGIN"));
 }
 
-void TrackerController::resetSimCommandSequence() {
-  _commandIndex = 0;
-  _simCommandsDone = false;
-  _lastCommandTime = 0;
-}
+// =====================================================
+// UPDATE
+// =====================================================
 
-void TrackerController::sendNextSimCommand() {
-  // Команды для SIM800L
-  const char* commands[] = {
-    "AT+CFUN=1",      // Включить радио
-    "AT",             // Проверка связи
-    "AT+CPIN?",       // Проверка SIM
-    "AT+CCID",        // ID SIM-карты
-    "AT+CREG=1",      // Включить регистрацию
-    "AT+CREG?",       // Статус регистрации
-    "AT+COPS=0",      // Автопоиск оператора
-    "AT+COPS?",       // Какой оператор найден
-    "AT+CSQ",         // Уровень сигнала
-    "AT+CBC"          // Напряжение
-  };
-  const int numCommands = 10;
-  
-  if (_commandIndex < numCommands) {
-    _sim->sendCommand(commands[_commandIndex]);
-    Serial.print("[SIM Command] ");
-    Serial.println(commands[_commandIndex]);
-    _commandIndex++;
-    _lastCommandTime = millis();
-  } else {
-    // Все команды выполнены
-    _simCommandsDone = true;
-    Serial.println("[SIM] All commands completed");
-  }
-}
+void TrackerController::update()
+{
+    switch (_state)
+    {
+        case TrackerState::GPS_ACTIVE:
+            processGPS();
+            break;
 
-void TrackerController::update() {
-  // Обновляем GPS
-  _gps->update();
-  
-  // Проверяем, получили ли данные GPS
-  String gpsData = _gps->getRawData();
-  if (gpsData.length() > 0 && !_gpsDataReady) {
-    _gpsDataReady = true;
-    Serial.println("[GPS] Data received!");
-    Serial.println(gpsData);
-  }
-  
-  // Обновляем SIM если он активен
-  if (SystemModes::shouldSIMBeActive()) {
-    _sim->update();
-    
-    // Получаем ответы от SIM
-    String simData = _sim->getData();
-    if (simData.length() > 0) {
-      Serial.print("[SIM Response] ");
-      Serial.println(simData);
+        case TrackerState::GSM_ACTIVE:
+            processGSM();
+            break;
+
+        default:
+            break;
     }
-    
-    // Отправляем следующую команду (раз в 3 секунды)
-    if (!_simCommandsDone && millis() - _lastCommandTime >= 3000) {
-      sendNextSimCommand();
+}
+
+// =====================================================
+// PROCESS GPS
+// =====================================================
+
+void TrackerController::processGPS()
+{
+    _gps->update();
+
+    if (_gps->hasFix())
+    {
+        Serial.println(F("[TRACKER] GPS FIX OK"));
+
+        _gps->disable();
+
+        _gsm->enable();
+
+        _gsm->setURL(_gps->getURL());
+
+        _state = TrackerState::GSM_ACTIVE;
     }
-  }
-  
-  // Обновляем состояние трекера
-  SystemModes::updateTrackerState(_gpsDataReady, _simCommandsDone);
-  
-  // В режиме сна проверяем MPU
-  if (SystemModes::getCurrentMode() == OperationMode::SLEEP_MODE) {
-    _mpu->update();
-    // Проверка движения по акселерометру
-    if (_mpu->available()) {
-      String mpuData = _mpu->getData();
-      // Упрощенная проверка - если есть данные, считаем движение
-      if (mpuData.length() > 0) {
-        _mpuMovementDetected = true;
-        SystemModes::wakeUp();
-      }
+}
+
+// =====================================================
+// PROCESS GSM
+// =====================================================
+
+void TrackerController::processGSM()
+{
+    _gsm->update();
+
+    if (_gsm->isDone())
+    {
+        Serial.println(F("[TRACKER] GSM DONE"));
+
+        _gsm->disable();
+
+        _gps->reset();
+
+        _gps->enable();
+
+        _state = TrackerState::GPS_ACTIVE;
     }
-  }
 }
 
-bool TrackerController::isGPSDataReady() {
-  return _gpsDataReady;
+// =====================================================
+// SET STATE
+// =====================================================
+
+void TrackerController::setState(TrackerState state)
+{
+    _state = state;
+
+    Serial.print(F("[TRACKER] STATE -> "));
+
+    switch (_state)
+    {
+        case TrackerState::IDLE:
+            Serial.println(F("IDLE"));
+            break;
+
+        case TrackerState::GPS_ACTIVE:
+            Serial.println(F("GPS_ACTIVE"));
+            break;
+
+        case TrackerState::GSM_ACTIVE:
+            Serial.println(F("GSM_ACTIVE"));
+            break;
+
+        case TrackerState::SLEEP:
+            Serial.println(F("SLEEP"));
+            break;
+
+        default:
+            Serial.println(F("OTHER"));
+            break;
+    }
 }
 
-bool TrackerController::isSIMCommandsDone() {
-  return _simCommandsDone;
-}
+// =====================================================
+// GET STATE
+// =====================================================
 
-bool TrackerController::isMPUMovementDetected() {
-  return _mpuMovementDetected;
-}
-
-void TrackerController::forceGPSRead() {
-  _gpsDataReady = false;
-  // Принудительное чтение GPS
-  _gps->update();
-  _gps->getRawData();  // Триггер чтения
-}
-
-void TrackerController::forceSIMCommands() {
-  resetSimCommandSequence();
-  _simCommandsDone = false;
-}
-
-void TrackerController::resetCycle() {
-  _gpsDataReady = false;
-  _simCommandsDone = false;
-  _commandIndex = 0;
-  _lastCommandTime = 0;
-  Serial.println("[TrackerController] Internal state reset");
+TrackerState TrackerController::getState()
+{
+    return _state;
 }

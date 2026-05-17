@@ -1,10 +1,10 @@
-//SIM.cpp
-#include "SIM.h"
+//GSM.cpp
+#include "GSM.h"
 
-SIM::SIM(int rxPin, int txPin) {
+GSM::GSM(int rxPin, int txPin) {
   _rxPin = rxPin;
   _txPin = txPin;
-  _simSerial = new SoftwareSerial(rxPin, txPin);
+  _gsmSerial = new SoftwareSerial(rxPin, txPin);
   _enabled = true;
   _buffer = "";
   _lineBuffer = "";
@@ -14,47 +14,47 @@ SIM::SIM(int rxPin, int txPin) {
   _responseStartTime = 0;
 }
 
-void SIM::begin(long baudrate) {
+void GSM::begin(long baudrate) {
   if (_enabled) {
-    _simSerial->begin(baudrate);
+    _gsmSerial->begin(baudrate);
     delay(100);
     clearBuffers();
   }
 }
 
-void SIM::enable() {
+void GSM::enable() {
   _enabled = true;
-  _simSerial->begin(9600);
+  _gsmSerial->begin(9600);
   delay(100);
   clearBuffers();
 }
 
-void SIM::disable() {
+void GSM::disable() {
   _enabled = false;
-  _simSerial->end();
+  _gsmSerial->end();
   clearBuffers();
 }
 
-bool SIM::isEnabled() {
+bool GSM::isEnabled() {
   return _enabled;
 }
 
-void SIM::setEnabled(bool enabled) {
+void GSM::setEnabled(bool enabled) {
   if (enabled && !_enabled) enable();
   else if (!enabled && _enabled) disable();
 }
 
-bool SIM::available() {
+bool GSM::available() {
   if (!_enabled) return false;
-  return _simSerial->available();
+  return _gsmSerial->available();
 }
 
 // ============= УЛУЧШЕННЫЙ update() для многострочных ответов =============
-void SIM::update() {
+void GSM::update() {
   if (!_enabled) return;
 
-  while (_simSerial->available()) {
-    char c = _simSerial->read();
+  while (_gsmSerial->available()) {
+    char c = _gsmSerial->read();
 
     if (c == '\n') {
       // Сохраняем строку в lineBuffer
@@ -96,7 +96,7 @@ void SIM::update() {
 }
 
 // ============= ПОЛУЧЕНИЕ ОТДЕЛЬНЫХ СТРОК =============
-String SIM::getData() {
+String GSM::getData() {
   if (!_enabled) return "";
 
   if (_hasNewData) {
@@ -109,7 +109,7 @@ String SIM::getData() {
 }
 
 // ============= НОВЫЙ МЕТОД: получение полного многострочного ответа =============
-String SIM::getFullResponse() {
+String GSM::getFullResponse() {
   if (!_enabled) return "";
   
   if (_responseComplete) {
@@ -121,29 +121,29 @@ String SIM::getFullResponse() {
   return "";
 }
 
-bool SIM::hasFullResponse() {
+bool GSM::hasFullResponse() {
   return _responseComplete;
 }
 
 // ============= УЛУЧШЕННАЯ отправка команд =============
-void SIM::sendCommand(const String& cmd) {
+void GSM::sendCommand(const String& cmd) {
   if (!_enabled) return;
   
   clearBuffers();
   _responseComplete = false;
   _multiLineBuffer = "";
   delay(50);
-  _simSerial->println(cmd);
+  _gsmSerial->println(cmd);
 }
 
 // ============= УЛУЧШЕННЫЙ метод с ожиданием полного ответа =============
-String SIM::sendCommandWithResponse(const String& cmd, int timeoutMs) {
+String GSM::sendCommandWithResponse(const String& cmd, int timeoutMs) {
   if (!_enabled) return "";
   
   clearBuffers();
   _responseComplete = false;
   _multiLineBuffer = "";
-  _simSerial->println(cmd);
+  _gsmSerial->println(cmd);
   
   unsigned long start = millis();
   while (millis() - start < timeoutMs) {
@@ -162,7 +162,7 @@ String SIM::sendCommandWithResponse(const String& cmd, int timeoutMs) {
 }
 
 // ============= ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ =============
-void SIM::clearBuffers() {
+void GSM::clearBuffers() {
   _buffer = "";
   _lineBuffer = "";
   _multiLineBuffer = "";
@@ -170,42 +170,42 @@ void SIM::clearBuffers() {
   _responseComplete = false;
   
   if (_enabled) {
-    while (_simSerial->available()) {
-      _simSerial->read();
+    while (_gsmSerial->available()) {
+      _gsmSerial->read();
     }
   }
 }
 
-bool SIM::hasData() {
+bool GSM::hasData() {
   return _hasNewData;
 }
 
-bool SIM::sendSMS(const String& phoneNumber, const String& message) {
+bool GSM::sendSMS(const String& phoneNumber, const String& message) {
   return sendSMS(phoneNumber, message, 30000); // 30 секунд таймаут по умолчанию
 }
 
-bool SIM::sendSMS(const String& phoneNumber, const String& message, int timeoutMs) {
+bool GSM::sendSMS(const String& phoneNumber, const String& message, int timeoutMs) {
   if (!_enabled) {
-    Serial.println("[SIM] ERROR: Module disabled");
+    Serial.println("[GSM] ERROR: Module disabled");
     return false;
   }
   
-  Serial.println("[SIM] Sending SMS...");
+  Serial.println("[GSM] Sending SMS...");
   
   // 1. Устанавливаем текстовый режим SMS
-  _simSerial->println("AT+CMGF=1");
+  _gsmSerial->println("AT+CMGF=1");
   delay(500);
   update();
   String response = getFullResponse();
   if (response.indexOf("OK") < 0) {
-    Serial.println("[SIM] Failed to set SMS text mode");
+    Serial.println("[GSM] Failed to set SMS text mode");
     return false;
   }
   
   // 2. Указываем номер получателя
-  _simSerial->print("AT+CMGS=\"");
-  _simSerial->print(phoneNumber);
-  _simSerial->println("\"");
+  _gsmSerial->print("AT+CMGS=\"");
+  _gsmSerial->print(phoneNumber);
+  _gsmSerial->println("\"");
   delay(500);
   
   // 3. Ждём приглашение для ввода текста (символ '>')
@@ -213,8 +213,8 @@ bool SIM::sendSMS(const String& phoneNumber, const String& message, int timeoutM
   bool readyForMessage = false;
   
   while (millis() - start < timeoutMs) {
-    while (_simSerial->available()) {
-      char c = _simSerial->read();
+    while (_gsmSerial->available()) {
+      char c = _gsmSerial->read();
       if (c == '>') {
         readyForMessage = true;
         break;
@@ -225,16 +225,16 @@ bool SIM::sendSMS(const String& phoneNumber, const String& message, int timeoutM
   }
   
   if (!readyForMessage) {
-    Serial.println("[SIM] No response for message input");
+    Serial.println("[GSM] No response for message input");
     return false;
   }
   
   // 4. Отправляем текст сообщения
-  _simSerial->print(message);
+  _gsmSerial->print(message);
   delay(100);
   
   // 5. Отправляем Ctrl+Z (ASCII 26) для завершения
-  _simSerial->write(26);
+  _gsmSerial->write(26);
   
   // 6. Ждём ответ (обычно "+CMGS: xx" и "OK")
   start = millis();
@@ -244,7 +244,7 @@ bool SIM::sendSMS(const String& phoneNumber, const String& message, int timeoutM
     update();
     String fullResponse = getFullResponse();
     if (fullResponse.length() > 0) {
-      Serial.print("[SIM] Response: ");
+      Serial.print("[GSM] Response: ");
       Serial.println(fullResponse);
       
       if (fullResponse.indexOf("OK") >= 0 && fullResponse.indexOf("+CMGS") >= 0) {
@@ -256,10 +256,10 @@ bool SIM::sendSMS(const String& phoneNumber, const String& message, int timeoutM
   }
   
   if (sentSuccess) {
-    Serial.println("[SIM] SMS sent successfully!");
+    Serial.println("[GSM] SMS sent successfully!");
     return true;
   } else {
-    Serial.println("[SIM] Failed to send SMS");
+    Serial.println("[GSM] Failed to send SMS");
     return false;
   }
 }

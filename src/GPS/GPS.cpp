@@ -1,7 +1,7 @@
-//NEO.cpp
-#include "NEO.h"
+//GPS.cpp
+#include "GPS.h"
 
-NEO::NEO(int rxPin, int txPin) {
+GPS::GPS(int rxPin, int txPin) {
   _rxPin = rxPin;
   _txPin = txPin;
   _gpsSerial = new SoftwareSerial(rxPin, txPin);
@@ -14,7 +14,7 @@ NEO::NEO(int rxPin, int txPin) {
   memset(_lineBuffer, 0, sizeof(_lineBuffer));
 }
 
-void NEO::begin(long baudrate) {
+void GPS::begin(long baudrate) {
   if (_enabled) {
     _gpsSerial->begin(baudrate);
     delay(100);
@@ -29,7 +29,7 @@ void NEO::begin(long baudrate) {
   }
 }
 
-void NEO::enable() {
+void GPS::enable() {
   _enabled = true;
   _gpsSerial->begin(9600);
   delay(100);
@@ -38,7 +38,7 @@ void NEO::enable() {
   }
 }
 
-void NEO::disable() {
+void GPS::disable() {
   _enabled = false;
   _gpsSerial->end();
   _bufferIndex = 0;
@@ -46,11 +46,11 @@ void NEO::disable() {
   _hasNewData = false;
 }
 
-bool NEO::isEnabled() {
+bool GPS::isEnabled() {
   return _enabled;
 }
 
-void NEO::setEnabled(bool enabled) {
+void GPS::setEnabled(bool enabled) {
   if (enabled && !_enabled) {
     enable();
   } else if (!enabled && _enabled) {
@@ -58,12 +58,12 @@ void NEO::setEnabled(bool enabled) {
   }
 }
 
-bool NEO::available() {
+bool GPS::available() {
   if (!_enabled) return false;
   return _gpsSerial->available();
 }
 
-void NEO::update() {
+void GPS::update() {
   if (!_enabled) return;
   
   while (_gpsSerial->available()) {
@@ -91,7 +91,7 @@ void NEO::update() {
 }
 
 // Возвращает указатель на внутренний буфер (НЕ копирует)
-const char* NEO::getRawData() {
+const char* GPS::getRawData() {
   if (!_enabled || !_hasNewData) return nullptr;
   
   if (_lineIndex > 0 && _lineBuffer[0] == '$') {
@@ -104,7 +104,7 @@ const char* NEO::getRawData() {
 }
 
 // Копирует данные в предоставленный буфер (безопасно)
-void NEO::getRawDataAsString(char* output, size_t maxLen) {
+void GPS::getRawDataAsString(char* output, size_t maxLen) {
   if (!output || maxLen == 0) return;
   
   const char* data = getRawData();
@@ -117,7 +117,7 @@ void NEO::getRawDataAsString(char* output, size_t maxLen) {
 }
 
 // Прямой вывод в Serial (экономит RAM полностью)
-void NEO::printRawData(HardwareSerial& serial) {
+void GPS::printRawData(HardwareSerial& serial) {
   if (!_enabled || !_hasNewData) return;
   
   if (_lineIndex > 0 && _lineBuffer[0] == '$') {
@@ -130,6 +130,6 @@ void NEO::printRawData(HardwareSerial& serial) {
   }
 }
 
-SoftwareSerial* NEO::getSerial() {
+SoftwareSerial* GPS::getSerial() {
   return _gpsSerial;
 }

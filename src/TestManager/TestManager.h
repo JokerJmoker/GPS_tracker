@@ -1,4 +1,5 @@
 //TestManager.h
+/*
 #ifndef TEST_MANAGER_H
 #define TEST_MANAGER_H
 
@@ -71,3 +72,5 @@ class TestManager {
 };
 
 #endif
+
+*/

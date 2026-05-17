@@ -1,12 +1,12 @@
-#ifndef SIM_H
-#define SIM_H
+#ifndef GSM_H
+#define GSM_H
 
 #include <Arduino.h>
 #include <SoftwareSerial.h>
 
-class SIM {
+class GSM {
   private:
-    SoftwareSerial* _simSerial;
+    SoftwareSerial* _gsmSerial;
     int _rxPin;
     int _txPin;
     bool _enabled;
@@ -18,7 +18,7 @@ class SIM {
     unsigned long _responseStartTime;  // НОВОЕ: время начала ответа
 
   public:
-    SIM(int rxPin, int txPin);
+    GSM(int rxPin, int txPin);
     void begin(long baudrate = 9600);
     void enable();
     void disable();
