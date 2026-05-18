@@ -7,6 +7,7 @@
 
 #include <Arduino.h>
 #include "GSM.h"
+#include "Config.h"
 
 // =====================================================
 // GSM STATES

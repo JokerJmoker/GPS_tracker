@@ -114,22 +114,91 @@ void GSM_FSM::update()
 void GSM_FSM::sendMock()
 {
     Serial.println();
-    Serial.println(F("===== GSM MOCK SEND ====="));
+    Serial.println(F("===== GSM MOCK SESSION ====="));
 
-    Serial.println(F("[GSM] AT"));
-    Serial.println(F("OK"));
+    // =====================================
+    // GSM INIT
+    // =====================================
 
-    Serial.println(F("[GSM] AT+CMGF=1"));
-    Serial.println(F("OK"));
+    Serial.println(F("[GSM TX] AT"));
+    delay(300);
 
-    Serial.println(F("[GSM] SMS SENT"));
+    Serial.println(F("[GSM RX] OK"));
+
+    // =====================================
+    // SMS TEXT MODE
+    // =====================================
+
+    Serial.println();
+    Serial.println(F("[GSM TX] AT+CMGF=1"));
+    delay(300);
+
+    Serial.println(F("[GSM RX] OK"));
+
+    // =====================================
+    // SMS DESTINATION
+    // =====================================
+
+    Serial.println();
+    Serial.print(F("[GSM TX] AT+CMGS=\""));
+    Serial.print(GSM_PHONE_NUMBER);
+    Serial.println(F("\""));
+
+    delay(500);
+
+    Serial.println(F("[GSM RX] >"));
+
+    // =====================================
+    // SMS BODY
+    // =====================================
+
+    Serial.println();
+    Serial.println(F("[GSM TX] SMS BODY:"));
 
     Serial.println(_url);
 
-    Serial.println(F("========================="));
+    delay(1000);
+
+    // CTRL+Z
+    Serial.println(F("[GSM TX] 0x1A (CTRL+Z)"));
+
+    delay(1500);
+
+    // =====================================
+    // GSM RESPONSE EMULATION
+    // =====================================
+
+    bool success = true;
+
+    // можно потом заменить на random()
+    if (success)
+    {
+        Serial.println();
+        Serial.println(F("[GSM RX] +CMGS: 45"));
+        Serial.println(F("[GSM RX] OK"));
+
+        Serial.println();
+        Serial.println(F("[GSM] SMS SEND SUCCESS"));
+    }
+    else
+    {
+        Serial.println();
+        Serial.println(F("[GSM RX] ERROR"));
+
+        Serial.println();
+        Serial.println(F("[GSM] SMS SEND FAILED"));
+    }
+
+    Serial.println(F("=============================="));
     Serial.println();
 
-    _done = true;
+    // =====================================
+    // MOCK INTERNAL CALLBACK
+    // =====================================
+
+    _gsm->sendSMS(GSM_PHONE_NUMBER, _url);
+
+    _done = success;
 
     _state = GSMState::DONE;
 }

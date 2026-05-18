@@ -1,23 +1,8 @@
-// =====================================================
-// FILE: src/ModeManager/TrackerController.h
-// =====================================================
-
-#ifndef TRACKER_CONTROLLER_H
-#define TRACKER_CONTROLLER_H
-
 #pragma once
-
-// =====================================================
-// FSM
-// =====================================================
 
 #include "GPS/GPS_FSM.h"
 #include "GSM/GSM_FSM.h"
 #include "MPU/MPU_FSM.h"
-
-// =====================================================
-// TRACKER STATES
-// =====================================================
 
 enum class TrackerState
 {
@@ -25,71 +10,74 @@ enum class TrackerState
 
     GPS_ACTIVE,
     GPS_WAIT_FIX,
-    GPS_DONE,
 
     GSM_ACTIVE,
-    GSM_SEND,
     GSM_WAIT_RESPONSE,
-    GSM_DONE,
 
-    SLEEP
+    WAIT_NEXT_CYCLE,
+
+    ERROR_STATE
 };
-
-// =====================================================
-// TRACKER CONTROLLER
-// =====================================================
 
 class TrackerController
 {
 public:
-
-    // =====================================
-    // CONSTRUCTOR
-    // =====================================
-
-    TrackerController(
-        GPS_FSM* gps,
-        GSM_FSM* gsm,
-        MPU_FSM* mpu
-    );
-
-    // =====================================
-    // SYSTEM
-    // =====================================
+    TrackerController(GPS_FSM*, GSM_FSM*, MPU_FSM*);
 
     void begin();
     void update();
 
-    // =====================================
-    // STATE
-    // =====================================
-
-    void setState(TrackerState state);
-
-    TrackerState getState();
-
 private:
-
-    // =====================================
-    // MODULE FSM
-    // =====================================
 
     GPS_FSM* _gps;
     GSM_FSM* _gsm;
     MPU_FSM* _mpu;
 
-    // =====================================
-    // CURRENT STATE
-    // =====================================
-
     TrackerState _state;
 
-    // =====================================
-    // INTERNAL FSM
-    // =====================================
+    // =========================
+    // TIMERS
+    // =========================
+
+    unsigned long _gpsStartTime = 0;
+    unsigned long _gsmStartTime = 0;
+    unsigned long _cycleCooldownStart = 0;
+
+    // =========================
+    // CONFIG
+    // =========================
+
+    static constexpr unsigned long GPS_TIMEOUT = 15000;
+    static constexpr unsigned long GSM_TIMEOUT = 20000;
+    static constexpr unsigned long CYCLE_DELAY = 10000;
+
+    // =========================
+    // ANTI-SPAM FLAGS (IMPORTANT)
+    // =========================
+
+    bool _gpsLatch = false;
+    bool _gsmLatch = false;
+
+    // =========================
+    // INTERNAL
+    // =========================
 
     void processGPS();
     void processGSM();
-};
+    void processCooldown();
 
-#endif
+    void resetCycle();
+
+    // =========================
+    // CYCLE CONTROL (NEW)
+    // =========================
+
+    uint32_t _cycleCounter = 0;
+
+    // dynamic cooldown per cycle
+    unsigned long getCycleDelay() const;
+
+    // watchdog
+    unsigned long _cycleStartTime = 0;
+    const unsigned long MAX_CYCLE_LIFETIME = 60000; // 60s hard reset
+};

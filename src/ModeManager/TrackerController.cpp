@@ -1,9 +1,5 @@
-// =====================================================
-// FILE: src/ModeManager/TrackerController.cpp
-// =====================================================
-
 #include "TrackerController.h"
-
+#include "Config.h"
 // =====================================================
 // CONSTRUCTOR
 // =====================================================
@@ -19,6 +15,9 @@ TrackerController::TrackerController(
     _mpu = mpu;
 
     _state = TrackerState::IDLE;
+
+    _gpsLatch = false;
+    _gsmLatch = false;
 }
 
 // =====================================================
@@ -28,10 +27,30 @@ TrackerController::TrackerController(
 void TrackerController::begin()
 {
     Serial.println(F("[TRACKER] BEGIN"));
+
+    _gps->reset();
+
+    _gps->enable();
+
+    #if GPS_MOCK_MODE == 2
+
+        _gps->setState(GPSState::MOCK_PARSE);
+
+    #elif GPS_MOCK_MODE == 3
+
+        _gps->setState(GPSState::REAL_FIX);
+
+    #else
+
+        _gps->setState(GPSState::REAL_FIX);
+
+    #endif
+
+    _state = TrackerState::GPS_ACTIVE;
 }
 
 // =====================================================
-// UPDATE
+// MAIN UPDATE
 // =====================================================
 
 void TrackerController::update()
@@ -39,11 +58,17 @@ void TrackerController::update()
     switch (_state)
     {
         case TrackerState::GPS_ACTIVE:
+        case TrackerState::GPS_WAIT_FIX:
             processGPS();
             break;
 
         case TrackerState::GSM_ACTIVE:
+        case TrackerState::GSM_WAIT_RESPONSE:
             processGSM();
+            break;
+
+        case TrackerState::WAIT_NEXT_CYCLE:
+            processCooldown();
             break;
 
         default:
@@ -52,88 +77,209 @@ void TrackerController::update()
 }
 
 // =====================================================
-// PROCESS GPS
+// RESET CYCLE (SAFE ENTRY POINT)
+// =====================================================
+
+void TrackerController::resetCycle()
+{
+    Serial.println(F("[TRACKER] RESET CYCLE"));
+
+    _gps->disable();
+    _gsm->disable();
+
+    _gpsLatch = false;
+    _gsmLatch = false;
+
+    _state = TrackerState::WAIT_NEXT_CYCLE;
+
+    _cycleCounter++;
+
+    _cycleCooldownStart = millis();
+    _cycleStartTime = millis();   // 👈 NEW watchdog start
+}
+
+// =====================================================
+// GPS PROCESS
 // =====================================================
 
 void TrackerController::processGPS()
 {
     _gps->update();
 
+    // -------------------------
+    // ENTER STATE ONCE
+    // -------------------------
+    if (!_gpsLatch)
+    {
+        _gpsLatch = true;
+
+        _gpsStartTime = millis();
+
+        Serial.println(F("[TRACKER] GPS ACTIVE"));
+    }
+
+    // -------------------------
+    // FIX RECEIVED (EDGE EVENT)
+    // -------------------------
     if (_gps->hasFix())
     {
-        Serial.println(F("[TRACKER] GPS FIX OK"));
+        if (_gsmLatch) return; // защита от повторного входа
+
+        Serial.println(F("[TRACKER] GPS FIX RECEIVED"));
 
         _gps->disable();
 
         _gsm->enable();
-
         _gsm->setURL(_gps->getURL());
 
+        _gsmLatch = true;
         _state = TrackerState::GSM_ACTIVE;
+        _gsmStartTime = millis();
+
+        return;
+    }
+
+    // -------------------------
+    // TIMEOUT
+    // -------------------------
+    if (millis() - _gpsStartTime > GPS_TIMEOUT)
+    {
+        Serial.println(F("[TRACKER] GPS TIMEOUT"));
+
+        resetCycle();
     }
 }
 
 // =====================================================
-// PROCESS GSM
+// GSM PROCESS
 // =====================================================
 
 void TrackerController::processGSM()
 {
     _gsm->update();
 
+    // -------------------------
+    // ENTER STATE ONCE
+    // -------------------------
+    if (_state == TrackerState::GSM_ACTIVE)
+    {
+        Serial.println(F("[TRACKER] GSM SEND START"));
+
+        _state = TrackerState::GSM_WAIT_RESPONSE;
+    }
+
+    // -------------------------
+    // DONE
+    // -------------------------
     if (_gsm->isDone())
     {
         Serial.println(F("[TRACKER] GSM DONE"));
 
         _gsm->disable();
 
-        _gps->reset();
-
-        _gps->enable();
-
-        _state = TrackerState::GPS_ACTIVE;
+        resetCycle();
+        return;
     }
-}
 
-// =====================================================
-// SET STATE
-// =====================================================
-
-void TrackerController::setState(TrackerState state)
-{
-    _state = state;
-
-    Serial.print(F("[TRACKER] STATE -> "));
-
-    switch (_state)
+    // -------------------------
+    // TIMEOUT
+    // -------------------------
+    if (millis() - _gsmStartTime > GSM_TIMEOUT)
     {
-        case TrackerState::IDLE:
-            Serial.println(F("IDLE"));
-            break;
+        Serial.println(F("[TRACKER] GSM TIMEOUT"));
 
-        case TrackerState::GPS_ACTIVE:
-            Serial.println(F("GPS_ACTIVE"));
-            break;
-
-        case TrackerState::GSM_ACTIVE:
-            Serial.println(F("GSM_ACTIVE"));
-            break;
-
-        case TrackerState::SLEEP:
-            Serial.println(F("SLEEP"));
-            break;
-
-        default:
-            Serial.println(F("OTHER"));
-            break;
+        resetCycle();
     }
 }
 
 // =====================================================
-// GET STATE
+// COOLDOWN
 // =====================================================
 
-TrackerState TrackerController::getState()
+void TrackerController::processCooldown()
 {
-    return _state;
+    if (millis() - _cycleCooldownStart < CYCLE_DELAY)
+    {
+        return;
+    }
+
+    Serial.println(F("[TRACKER] NEW CYCLE START"));
+
+    // =====================================
+    // RESET FSM
+    // =====================================
+
+    _gps->reset();
+
+    // =====================================
+    // ENABLE GPS
+    // =====================================
+
+    _gps->enable();
+
+    // =====================================
+    // RESTORE GPS MODE
+    // =====================================
+
+    #if GPS_MOCK_MODE == 2
+
+        _gps->setState(GPSState::MOCK_PARSE);
+
+    #elif GPS_MOCK_MODE == 3
+
+        _gps->setState(GPSState::REAL_FIX);
+
+    #else
+
+        _gps->setState(GPSState::REAL_FIX);
+
+    #endif
+
+    // =====================================
+    // RESET FLAGS
+    // =====================================
+
+    _gpsLatch = false;
+    _gsmLatch = false;
+
+    // =====================================
+    // NEXT STATE
+    // =====================================
+
+    _state = TrackerState::GPS_ACTIVE;
+}
+
+// =====================================================
+// TIMER
+// =====================================================
+
+unsigned long TrackerController::getCycleDelay() const
+{
+#ifdef MODE_DEBUG
+
+    // DEBUG MODE BEHAVIOR
+    #if GPS_MOCK_MODE == 2
+        return 5000;   // 5s fast loop spam mode
+    #elif GPS_MOCK_MODE == 1
+        return 0;      // instant loop (continuous)
+    #else
+        return 3000;
+    #endif
+
+#elif defined(MODE_TRACKER)
+
+    // TRACKER MODE BEHAVIOR
+    #if GPS_MOCK_MODE == 2
+        return 10000;  // 10s cycle
+    #elif GPS_MOCK_MODE == 3
+        return 15000;  // 15s cycle
+    #else
+        return 10000;
+    #endif
+
+#else
+
+    return 10000;
+
+#endif
 }
