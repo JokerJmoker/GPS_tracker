@@ -40,13 +40,15 @@ void GSM_FSM::begin()
 
 void GSM_FSM::enable()
 {
-    if (_enabled)
-        return;
-
+    if (_enabled) return;
+    
     _gsm->begin(9600);
-
     _enabled = true;
-
+    
+    //Сбрасываем состояние при enable
+    _done = false;
+    _state = (_mock ? GSMState::MOCK_SEND : GSMState::REAL_SEND);
+    
     Serial.println(F("[GSM FSM] ENABLED"));
 }
 
@@ -62,6 +64,11 @@ void GSM_FSM::disable()
     _gsm->disable();
 
     _enabled = false;
+    
+    _done = false;
+    _state = GSMState::IDLE;
+    _url[0] = '\0';
+    _t0 = 0;
 
     Serial.println(F("[GSM FSM] DISABLED"));
 }
@@ -292,6 +299,9 @@ void GSM_FSM::reset()
     _url[0] = '\0';
 
     _state = GSMState::IDLE;
+    if (_mock) {
+        _state = GSMState::MOCK_SEND;
+    }
 
     Serial.println(F("[GSM FSM] RESET"));
 }

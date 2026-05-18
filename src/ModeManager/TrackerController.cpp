@@ -87,6 +87,12 @@ void TrackerController::resetCycle()
 
     _gps->disable();
     _gsm->disable();
+    
+    // Принудительный сброс GSM FSM
+    _gsm->reset();
+    
+    // Принудительный сброс GPS FSM
+    _gps->reset();
 
     _gpsLatch = false;
     _gsmLatch = false;
@@ -94,9 +100,7 @@ void TrackerController::resetCycle()
     _state = TrackerState::WAIT_NEXT_CYCLE;
 
     _cycleCounter++;
-
     _cycleCooldownStart = millis();
-    _cycleStartTime = millis();   // 👈 NEW watchdog start
 }
 
 // =====================================================
@@ -212,6 +216,16 @@ void TrackerController::processCooldown()
 
     _gps->reset();
 
+
+    //Reset and reconfigure GSM
+    _gsm->reset();
+    
+    #if GPS_MOCK_MODE == 2
+        _gsm->setMode(true);  // Mock mode
+    #else
+        _gsm->setMode(false); // Real mode
+    #endif
+
     // =====================================
     // ENABLE GPS
     // =====================================
@@ -284,3 +298,4 @@ unsigned long TrackerController::getCycleDelay() const
 
 #endif
 }
+
