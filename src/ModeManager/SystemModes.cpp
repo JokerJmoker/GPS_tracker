@@ -1,7 +1,18 @@
-//SystemModes.cpp
+// SystemModes.cpp
 #include "SystemModes.h"
+#include "config.h"  // Добавьте эту строку!
 
-OperationMode SystemModes::_currentMode = OperationMode::DEBUG_MODE;
+// Теперь инициализируем режим на основе макросов из config.h
+OperationMode SystemModes::_currentMode = 
+    #if defined(MODE_TRACKER)
+        OperationMode::TRACKER_MODE
+    #elif defined(MODE_SLEEP)
+        OperationMode::SLEEP_MODE
+    #else
+        OperationMode::DEBUG_MODE
+    #endif
+;
+
 bool SystemModes::_modeSwitchRequested = false;
 unsigned long SystemModes::_gpsStartTime = 0;
 unsigned long SystemModes::_simStartTime = 0;
@@ -9,11 +20,11 @@ bool SystemModes::_gpsCompleted = false;
 bool SystemModes::_simCompleted = false;
 bool SystemModes::_oneCycleComplete = false;
 bool SystemModes::_gpsDataReceived = false;
-bool SystemModes::_simCommandsCompleted = false;  // Используем это имя везде
+bool SystemModes::_simCommandsCompleted = false;
 
 void SystemModes::begin() {
   pinMode(LED_BUILTIN, OUTPUT);
-  indicateModeChange();
+  indicateModeChange();  // Теперь покажет правильный режим
 }
 
 void SystemModes::setMode(OperationMode mode) {

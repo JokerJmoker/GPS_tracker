@@ -19,6 +19,8 @@
 // =====================================================
 
 #include "GPS/GPS_FSM.h"
+#include "GSM/GSM_FSM.h"
+#include "MPU/MPU_FSM.h"
 
 // =====================================================
 // MODE MANAGER
@@ -44,13 +46,13 @@ GPS gps(3, 4);
 // TX = 6
 // -------------------------------------
 
-GSM gsmModule(5, 6);
+GSM gsm(5, 6);
 
 // -------------------------------------
 // MPU6050
 // -------------------------------------
 
-MPU mpu6050;
+MPU mpu;
 
 // =====================================================
 // CREATE FSM
@@ -58,6 +60,9 @@ MPU mpu6050;
 
 GPS_FSM gpsFSM(&gps);
 
+GSM_FSM gsmFSM(&gsm);
+
+MPU_FSM mpuFSM(&mpu);
 // =====================================================
 // SETUP
 // =====================================================
@@ -123,37 +128,86 @@ void setup()
 
 #ifdef MODE_TRACKER
 
-    SystemModes::setMode(OperationMode::TRACKER_MODE);
+// =====================================================
+// GPS ACTIVE PHASE
+// =====================================================
 
-    Serial.println(F("[SYSTEM] MODE_TRACKER"));
+if (SystemModes::shouldGPSBeActive())
+{
+    if (!gpsFSM.isEnabled())
+    {
+        gpsFSM.enable();
+        gsmFSM.disable();
 
-    gpsFSM.begin();
-    gpsFSM.enable();
+        Serial.println(F("[TRACKER] GPS ACTIVE"));
+    }
 
-    // =====================================
-    // GPS FSM MODE SELECTION (TRACKER)
-    // =====================================
+    gpsFSM.update();
+}
 
+// =====================================================
+// GPS FIX → START GSM FSM
+// =====================================================
+
+if (gpsFSM.hasFix())
+{
+    Serial.println();
+    Serial.println(F("[TRACKER] GPS FIX RECEIVED"));
+
+    Serial.print(F("[TRACKER] URL: "));
+    Serial.println(gpsFSM.getURL());
+
+    // =============================
+    // STOP GPS
+    // =============================
+
+    gpsFSM.disable();
+
+    // =============================
+    // START GSM FSM (ONLY CONTROL POINT)
+    // =============================
+
+    gsmFSM.begin();
+    gsmFSM.setURL(gpsFSM.getURL());
+
+    // MOCK MODE SELECTION
     #if GPS_MOCK_MODE == 2
-
-        // MOCK PARSE MODE
-        Serial.println(F("[TRACKER] GPS MOCK PARSE MODE"));
-        gpsFSM.setState(GPSState::MOCK_PARSE);
-
+        gsmFSM.setMode(true);   // MOCK SEND
+        Serial.println(F("[TRACKER] GSM MOCK MODE"));
     #else
-
-        // DEFAULT SAFETY FALLBACK
-        Serial.println(F("[TRACKER] GPS REAL FIX MODE"));
-        gpsFSM.setState(GPSState::REAL_FIX);
-
+        gsmFSM.setMode(false);  // REAL SEND
+        Serial.println(F("[TRACKER] GSM REAL MODE"));
     #endif
 
-    // =====================================
-    // OTHER MODULES
-    // =====================================
+    gsmFSM.enable();
 
-    gsmModule.disable();
-    mpu6050.disable();
+    Serial.println(F("[TRACKER] GSM FSM STARTED"));
+
+    gpsFSM.reset();
+}
+
+// =====================================================
+// GSM FSM UPDATE
+// =====================================================
+
+if (gsmFSM.isEnabled())
+{
+    gsmFSM.update();
+
+    if (gsmFSM.isDone())
+    {
+        Serial.println();
+        Serial.println(F("[TRACKER] GSM COMPLETE"));
+
+        gsmFSM.disable();
+
+        gpsFSM.enable();
+
+        Serial.println(F("[TRACKER] RETURN TO GPS"));
+    }
+}
+
+delay(50);
 
 #endif
 
@@ -229,82 +283,100 @@ void loop()
 
 #ifdef MODE_TRACKER
 
-    // =====================================
-    // GPS ACTIVE
-    // =====================================
+// =====================================================
+// GPS ACTIVE PHASE
+// =====================================================
 
-    if (SystemModes::shouldGPSBeActive())
+if (SystemModes::shouldGPSBeActive())
+{
+    if (!gpsFSM.isEnabled())
     {
-        if (!gpsFSM.isEnabled())
-        {
-            gpsFSM.enable();
+        gpsFSM.enable();
+        gsm.disable();
 
-            gsmModule.disable();
-
-            Serial.println(F("[TRACKER] GPS ACTIVE"));
-        }
-
-        gpsFSM.update();
+        Serial.println(F("[TRACKER] GPS ACTIVE"));
     }
 
+    gpsFSM.update();
+}
+
+// =====================================================
+// GPS FIX RECEIVED → SWITCH TO GSM FSM
+// =====================================================
+
+if (gpsFSM.hasFix())
+{
+    Serial.println();
+    Serial.println(F("[TRACKER] GPS FIX RECEIVED"));
+
+    Serial.print(F("[TRACKER] URL: "));
+    Serial.println(gpsFSM.getURL());
+
     // =====================================
-    // FIX READY
+    // STOP GPS
     // =====================================
 
-    if (gpsFSM.hasFix())
+    gpsFSM.disable();
+
+    // =====================================
+    // START GSM FSM (IMPORTANT CHANGE)
+    // =====================================
+
+    gsmFSM.begin();
+    gsmFSM.setURL(gpsFSM.getURL());
+    gsmFSM.setMode(true); // MOCK MODE (или false если real)
+
+    gsmFSM.enable();
+
+    Serial.println(F("[TRACKER] GSM FSM STARTED"));
+
+    // =====================================
+    // RESET GPS LAYER (prepare next cycle)
+    // =====================================
+
+    gpsFSM.reset();
+
+    Serial.println(F("[TRACKER] SWITCHED TO GSM FSM"));
+}
+
+// =====================================================
+// GSM FSM PROCESSING (NEW CONTROL LAYER)
+// =====================================================
+
+if (gsmFSM.isEnabled())
+{
+    gsmFSM.update();
+
+    // =====================================
+    // GSM DONE → END CYCLE
+    // =====================================
+
+    if (gsmFSM.isDone())
     {
         Serial.println();
-        Serial.println(F("[TRACKER] GPS FIX RECEIVED"));
+        Serial.println(F("[TRACKER] GSM SEND COMPLETE"));
 
-        Serial.print(F("[TRACKER] URL: "));
-        Serial.println(gpsFSM.getURL());
+        // =====================================
+        // STOP GSM
+        // =====================================
 
-        // =================================
-        // DISABLE GPS
-        // =================================
+        gsmFSM.disable();
 
-        gpsFSM.disable();
-
-        // =================================
-        // ENABLE GSM
-        // =================================
-
-        gsmModule.begin(9600);
-
-        Serial.println(F("[TRACKER] GSM ACTIVE"));
-
-        // =================================
-        // MOCK GSM SEND
-        // =================================
-
-        Serial.println(F("[GSM] AT"));
-        Serial.println(F("OK"));
-
-        Serial.println(F("[GSM] AT+CMGF=1"));
-        Serial.println(F("OK"));
-
-        Serial.println(F("[GSM] SMS SENT"));
-
-        Serial.println(gpsFSM.getURL());
-
-        // =================================
-        // RESET FSM
-        // =================================
-
-        gpsFSM.reset();
-
-        // =================================
-        // BACK TO GPS
-        // =================================
-
-        gsmModule.disable();
+        // =====================================
+        // RETURN TO GPS MODE
+        // =====================================
 
         gpsFSM.enable();
 
         Serial.println(F("[TRACKER] RETURN TO GPS"));
     }
+}
 
-    delay(50);
+// =====================================================
+// SAFETY DELAY
+// =====================================================
+
+delay(50);
 
 #endif
 
