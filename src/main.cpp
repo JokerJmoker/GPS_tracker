@@ -29,6 +29,12 @@
 #include "ModeManager/SystemModes.h"
 
 // =====================================================
+// TRACKER CONTROLLER (NEW)
+// =====================================================
+
+#include "ModeManager/TrackerController.h"
+
+// =====================================================
 // CREATE MODULE OBJECTS
 // =====================================================
 
@@ -59,10 +65,17 @@ MPU mpu;
 // =====================================================
 
 GPS_FSM gpsFSM(&gps);
-
 GSM_FSM gsmFSM(&gsm);
-
 MPU_FSM mpuFSM(&mpu);
+
+// =====================================================
+// CREATE TRACKER CONTROLLER (for MODE_TRACKER)
+// =====================================================
+
+#ifdef MODE_TRACKER
+    TrackerController trackerController(&gpsFSM, &gsmFSM, &mpuFSM);
+#endif
+
 // =====================================================
 // SETUP
 // =====================================================
@@ -94,33 +107,24 @@ void setup()
 
 #ifdef MODE_DEBUG
 
-    SystemModes::setMode(OperationMode::DEBUG_MODE);
-
     Serial.println(F("[SYSTEM] MODE_DEBUG"));
 
     gpsFSM.begin();
-
     gpsFSM.enable();
 
-    // =====================================
-    // GPS FSM MODE SELECTION
-    // =====================================
-
     #if GPS_MOCK_MODE == 2
-
         gpsFSM.setState(GPSState::MOCK_PARSE);
-
     #elif GPS_MOCK_MODE == 1
-
         gpsFSM.setState(GPSState::REAL_FIX);
-
     #else
-
         gpsFSM.setState(GPSState::CONTINUOUS);
-
     #endif
 
-#endif
+    Serial.println();
+    Serial.println(F("[SYSTEM] READY"));
+    Serial.println();
+
+#endif // MODE_DEBUG
 
     // =====================================
     // MODE: TRACKER
@@ -128,88 +132,19 @@ void setup()
 
 #ifdef MODE_TRACKER
 
-// =====================================================
-// GPS ACTIVE PHASE
-// =====================================================
+    Serial.println(F("[SYSTEM] MODE_TRACKER"));
 
-if (SystemModes::shouldGPSBeActive())
-{
-    if (!gpsFSM.isEnabled())
-    {
-        gpsFSM.enable();
-        gsmFSM.disable();
+    // Initialize GPS FSM
+    gpsFSM.begin();
+    
+    // Initialize Tracker Controller (not GSM FSM directly!)
+    trackerController.begin();
 
-        Serial.println(F("[TRACKER] GPS ACTIVE"));
-    }
-
-    gpsFSM.update();
-}
-
-// =====================================================
-// GPS FIX → START GSM FSM
-// =====================================================
-
-if (gpsFSM.hasFix())
-{
     Serial.println();
-    Serial.println(F("[TRACKER] GPS FIX RECEIVED"));
+    Serial.println(F("[SYSTEM] READY"));
+    Serial.println();
 
-    Serial.print(F("[TRACKER] URL: "));
-    Serial.println(gpsFSM.getURL());
-
-    // =============================
-    // STOP GPS
-    // =============================
-
-    gpsFSM.disable();
-
-    // =============================
-    // START GSM FSM (ONLY CONTROL POINT)
-    // =============================
-
-    gsmFSM.begin();
-    gsmFSM.setURL(gpsFSM.getURL());
-
-    // MOCK MODE SELECTION
-    #if GPS_MOCK_MODE == 2
-        gsmFSM.setMode(true);   // MOCK SEND
-        Serial.println(F("[TRACKER] GSM MOCK MODE"));
-    #else
-        gsmFSM.setMode(false);  // REAL SEND
-        Serial.println(F("[TRACKER] GSM REAL MODE"));
-    #endif
-
-    gsmFSM.enable();
-
-    Serial.println(F("[TRACKER] GSM FSM STARTED"));
-
-    gpsFSM.reset();
-}
-
-// =====================================================
-// GSM FSM UPDATE
-// =====================================================
-
-if (gsmFSM.isEnabled())
-{
-    gsmFSM.update();
-
-    if (gsmFSM.isDone())
-    {
-        Serial.println();
-        Serial.println(F("[TRACKER] GSM COMPLETE"));
-
-        gsmFSM.disable();
-
-        gpsFSM.enable();
-
-        Serial.println(F("[TRACKER] RETURN TO GPS"));
-    }
-}
-
-delay(50);
-
-#endif
+#endif // MODE_TRACKER
 
     // =====================================
     // MODE: SLEEP
@@ -217,25 +152,19 @@ delay(50);
 
 #ifdef MODE_SLEEP
 
-    SystemModes::setMode(OperationMode::SLEEP_MODE);
-
     Serial.println(F("[SYSTEM] MODE_SLEEP"));
 
     gpsFSM.disable();
-
-    gsmModule.disable();
-
-    mpu6050.begin();
-
-#endif
-
-    // =====================================
-    // READY
-    // =====================================
+    gsm.disable();
+    mpu.begin();
 
     Serial.println();
-    Serial.println(F("[SYSTEM] READY"));
+    Serial.println(F("[SYSTEM] READY_SLEEP"));
     Serial.println();
+    
+    return; // SLEEP mode doesn't need loop
+
+#endif // MODE_SLEEP
 }
 
 // =====================================================
@@ -252,10 +181,6 @@ void loop()
 
     gpsFSM.update();
 
-    // =====================================
-    // URL READY
-    // =====================================
-
     if (gpsFSM.isURLReady())
     {
         Serial.println();
@@ -269,13 +194,12 @@ void loop()
         Serial.println(F("===================================="));
         Serial.println();
 
-        // после mock режима не повторяем цикл
         gpsFSM.reset();
     }
 
     delay(10);
 
-#endif
+#endif // MODE_DEBUG
 
     // =====================================
     // MODE_TRACKER
@@ -283,102 +207,12 @@ void loop()
 
 #ifdef MODE_TRACKER
 
-// =====================================================
-// GPS ACTIVE PHASE
-// =====================================================
+    // Just call the tracker controller - it handles everything!
+    trackerController.update();
+    
+    delay(50);
 
-if (SystemModes::shouldGPSBeActive())
-{
-    if (!gpsFSM.isEnabled())
-    {
-        gpsFSM.enable();
-        gsm.disable();
-
-        Serial.println(F("[TRACKER] GPS ACTIVE"));
-    }
-
-    gpsFSM.update();
-}
-
-// =====================================================
-// GPS FIX RECEIVED → SWITCH TO GSM FSM
-// =====================================================
-
-if (gpsFSM.hasFix())
-{
-    Serial.println();
-    Serial.println(F("[TRACKER] GPS FIX RECEIVED"));
-
-    Serial.print(F("[TRACKER] URL: "));
-    Serial.println(gpsFSM.getURL());
-
-    // =====================================
-    // STOP GPS
-    // =====================================
-
-    gpsFSM.disable();
-
-    // =====================================
-    // START GSM FSM (IMPORTANT CHANGE)
-    // =====================================
-
-    gsmFSM.begin();
-    gsmFSM.setURL(gpsFSM.getURL());
-    gsmFSM.setMode(true); // MOCK MODE (или false если real)
-
-    gsmFSM.enable();
-
-    Serial.println(F("[TRACKER] GSM FSM STARTED"));
-
-    // =====================================
-    // RESET GPS LAYER (prepare next cycle)
-    // =====================================
-
-    gpsFSM.reset();
-
-    Serial.println(F("[TRACKER] SWITCHED TO GSM FSM"));
-}
-
-// =====================================================
-// GSM FSM PROCESSING (NEW CONTROL LAYER)
-// =====================================================
-
-if (gsmFSM.isEnabled())
-{
-    gsmFSM.update();
-
-    // =====================================
-    // GSM DONE → END CYCLE
-    // =====================================
-
-    if (gsmFSM.isDone())
-    {
-        Serial.println();
-        Serial.println(F("[TRACKER] GSM SEND COMPLETE"));
-
-        // =====================================
-        // STOP GSM
-        // =====================================
-
-        gsmFSM.disable();
-
-        // =====================================
-        // RETURN TO GPS MODE
-        // =====================================
-
-        gpsFSM.enable();
-
-        Serial.println(F("[TRACKER] RETURN TO GPS"));
-    }
-}
-
-// =====================================================
-// SAFETY DELAY
-// =====================================================
-
-delay(50);
-
-#endif
+#endif // MODE_TRACKER
 
     // =====================================
     // MODE_SLEEP
@@ -386,68 +220,41 @@ delay(50);
 
 #ifdef MODE_SLEEP
 
-    // =====================================
-    // MPU ACTIVE
-    // =====================================
+    mpu.update();
 
-    mpu6050.update();
-
-    // =====================================
-    // MOVEMENT DETECTED
-    // =====================================
-
-    if (mpu6050.available())
+    if (mpu.available())
     {
         Serial.println();
         Serial.println(F("[SLEEP] WAKE UP"));
         Serial.println();
 
-        // =================================
-        // ENABLE GPS
-        // =================================
-
         gpsFSM.enable();
-
         gpsFSM.setState(GPSState::REAL_FIX);
 
-        // =================================
         // WAIT FIX
-        // =================================
-
-        while (!gpsFSM.hasFix())
+        unsigned long startTime = millis();
+        while (!gpsFSM.hasFix() && (millis() - startTime < 120000)) // 2 min timeout
         {
             gpsFSM.update();
             delay(10);
         }
 
-        // =================================
-        // SEND VIA GSM
-        // =================================
-
-        gsmModule.begin(9600);
-
-        Serial.println(F("[GSM] SMS SENT"));
-
-        Serial.println(gpsFSM.getURL());
-
-        // =================================
-        // DISABLE MODULES
-        // =================================
-
-        gsmModule.disable();
+        if (gpsFSM.hasFix())
+        {
+            gsm.begin(9600);
+            Serial.println(F("[GSM] SENDING URL..."));
+            Serial.println(gpsFSM.getURL());
+            // Add actual GSM send command here
+            gsm.disable();
+        }
 
         gpsFSM.disable();
-
         gpsFSM.reset();
-
-        // =================================
-        // RETURN SLEEP
-        // =================================
 
         Serial.println(F("[SLEEP] RETURN TO SLEEP"));
     }
 
     delay(100);
 
-#endif
+#endif // MODE_SLEEP
 }

@@ -29,21 +29,22 @@ void TrackerController::begin()
     Serial.println(F("[TRACKER] BEGIN"));
 
     _gps->reset();
-
     _gps->enable();
 
     #if GPS_MOCK_MODE == 2
-
         _gps->setState(GPSState::MOCK_PARSE);
-
     #elif GPS_MOCK_MODE == 3
-
         _gps->setState(GPSState::REAL_FIX);
-
     #else
-
         _gps->setState(GPSState::REAL_FIX);
+    #endif
 
+    #ifdef GPS_MOCK_MODE
+        #if GPS_MOCK_MODE == 2
+            _gsm->setMode(true);  // Mock mode
+        #else
+            _gsm->setMode(false); // Real mode
+        #endif
     #endif
 
     _state = TrackerState::GPS_ACTIVE;
