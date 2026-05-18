@@ -1,4 +1,7 @@
-//GPSParser.cpp
+// =====================================================
+// FILE: src/GPS/GPSParser.cpp
+// =====================================================
+
 #include "GPSParser.h"
 #include <string.h>
 #include <stdlib.h>

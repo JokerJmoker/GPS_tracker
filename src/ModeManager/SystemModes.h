@@ -1,3 +1,7 @@
+// =====================================================
+// FILE: src/ModeManager/SystemModes.h
+// =====================================================
+
 #ifndef SYSTEM_MODES_H
 #define SYSTEM_MODES_H
 

@@ -1,4 +1,7 @@
-// SystemModes.cpp
+// =====================================================
+// FILE: src/ModeManager/SystemModes.cpp
+// =====================================================
+
 #include "SystemModes.h"
 #include "config.h"  // Добавьте эту строку!
 
