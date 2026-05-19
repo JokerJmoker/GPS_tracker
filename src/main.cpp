@@ -72,8 +72,14 @@ MPU_FSM mpuFSM(&mpu);
 // CREATE TRACKER CONTROLLER (for MODE_TRACKER)
 // =====================================================
 
-#ifdef MODE_TRACKER
-    TrackerController trackerController(&gpsFSM, &gsmFSM, &mpuFSM);
+#if defined(MODE_TRACKER) || defined(MODE_SLEEP)
+
+    TrackerController trackerController(
+        &gpsFSM,
+        &gsmFSM,
+        &mpuFSM
+    );
+
 #endif
 
 // =====================================================
@@ -157,7 +163,7 @@ void setup()
     Serial.println(F("[SYSTEM] MODE_TRACKER"));
 
     // Initialize GPS FSM
-    gpsFSM.begin();
+    //gpsFSM.begin();
     
     // Initialize Tracker Controller (not GSM FSM directly!)
     trackerController.begin();
@@ -176,17 +182,14 @@ void setup()
 
     Serial.println(F("[SYSTEM] MODE_SLEEP"));
 
-    gpsFSM.disable();
-    gsm.disable();
-    mpu.begin();
+    trackerController.begin();
 
     Serial.println();
     Serial.println(F("[SYSTEM] READY_SLEEP"));
     Serial.println();
-    
-    return; // SLEEP mode doesn't need loop
 
-#endif // MODE_SLEEP
+#endif
+
 }
 
 // =====================================================
@@ -276,41 +279,9 @@ void loop()
 
 #ifdef MODE_SLEEP
 
-    mpu.update();
+    trackerController.update();
 
-    if (mpu.available())
-    {
-        Serial.println();
-        Serial.println(F("[SLEEP] WAKE UP"));
-        Serial.println();
+    delay(50);
 
-        gpsFSM.enable();
-        gpsFSM.setState(GPSState::REAL_FIX);
-
-        // WAIT FIX
-        unsigned long startTime = millis();
-        while (!gpsFSM.hasFix() && (millis() - startTime < 120000)) // 2 min timeout
-        {
-            gpsFSM.update();
-            delay(10);
-        }
-
-        if (gpsFSM.hasFix())
-        {
-            gsm.begin(9600);
-            Serial.println(F("[GSM] SENDING URL..."));
-            Serial.println(gpsFSM.getURL());
-            // Add actual GSM send command here
-            gsm.disable();
-        }
-
-        gpsFSM.disable();
-        gpsFSM.reset();
-
-        Serial.println(F("[SLEEP] RETURN TO SLEEP"));
-    }
-
-    delay(100);
-
-#endif // MODE_SLEEP
+#endif
 }

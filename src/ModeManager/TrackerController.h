@@ -20,7 +20,9 @@ enum class TrackerState
 
     WAIT_NEXT_CYCLE,
 
-    ERROR_STATE
+    ERROR_STATE,
+
+    SLEEP_LISTENING
 };
 
 class TrackerController
@@ -69,6 +71,8 @@ private:
     void processGPS();
     void processGSM();
     void processCooldown();
+
+    void processSleepListening();
 
     void resetCycle();
 
