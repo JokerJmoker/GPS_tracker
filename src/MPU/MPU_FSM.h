@@ -1,7 +1,3 @@
-// =====================================================
-// FILE: src/MPU/MPU_FSM.h
-// =====================================================
-
 #pragma once
 
 #include <Arduino.h>
@@ -14,8 +10,8 @@
 enum class MPUState
 {
     DISABLED,
-    AWAKEN,
-    SLEEP
+    LISTENING,
+    AWAKEN
 };
 
 // =====================================================
@@ -26,31 +22,36 @@ class MPU_FSM
 {
 public:
 
-    // =====================================
-    // CONSTRUCTOR
-    // =====================================
-
     MPU_FSM(MPU* mpu);
 
-    // =====================================
-    // FSM
-    // =====================================
+    void begin();
+
+    void update();
 
     void setState(MPUState state);
 
     MPUState getState();
 
-    // =====================================
-    // SYSTEM
-    // =====================================
-
-    void begin();
-
-    void update();
+    bool isAwaken();
 
 private:
 
     MPU* _mpu;
 
     MPUState _state;
+
+    // =====================================
+    // POSITION TRACKING
+    // =====================================
+
+    int16_t _lastAX;
+    int16_t _lastAY;
+    int16_t _lastAZ;
+
+    bool _hasInitialPosition;
+
+    // sensitivity threshold
+    int16_t _movementThreshold;
+
+    bool detectMovement();
 };

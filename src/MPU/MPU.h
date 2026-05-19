@@ -33,6 +33,10 @@ class MPU {
     bool available();        // Проверка, инициализирован ли датчик
 
     String getData();        // Возвращает строку с данными акселерометра
+
+    int16_t getAX();
+    int16_t getAY();
+    int16_t getAZ();
 };
 
 #endif

@@ -87,3 +87,18 @@ String MPU::getData() {
 
   return data;
 }
+
+int16_t MPU::getAX()
+{
+    return _ax;
+}
+
+int16_t MPU::getAY()
+{
+    return _ay;
+}
+
+int16_t MPU::getAZ()
+{
+    return _az;
+}

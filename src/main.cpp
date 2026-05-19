@@ -139,7 +139,6 @@ void setup()
         Serial.println(F("[DEBUG] TEST_MPU6050"));
 
         mpuFSM.begin();
-        mpuFSM.setState(MPUState::ACTIVE);
 
     #endif
 
@@ -240,10 +239,16 @@ void loop()
 
         mpuFSM.update();
 
-        if (mpu.available())
+        if (mpuFSM.isAwaken())
         {
-            Serial.print(F("[MPU DATA] "));
-            Serial.println(mpu.getData());
+            Serial.println();
+            Serial.println(F("===================================="));
+            Serial.println(F("[SYSTEM] MOVEMENT DETECTED"));
+            Serial.println(F("===================================="));
+            Serial.println();
+
+            // emulate external handling
+            mpuFSM.setState(MPUState::DISABLED);
         }
 
     #endif
