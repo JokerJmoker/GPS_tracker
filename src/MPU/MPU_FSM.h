@@ -14,7 +14,7 @@
 enum class MPUState
 {
     DISABLED,
-    ACTIVE,
+    AWAKEN,
     SLEEP
 };
 

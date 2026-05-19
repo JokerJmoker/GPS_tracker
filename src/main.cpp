@@ -109,15 +109,38 @@ void setup()
 
     Serial.println(F("[SYSTEM] MODE_DEBUG"));
 
-    gpsFSM.begin();
-    gpsFSM.enable();
+    // =====================================
+    // GPS TEST
+    // =====================================
 
-    #if GPS_MOCK_MODE == 2
-        gpsFSM.setState(GPSState::MOCK_PARSE);
-    #elif GPS_MOCK_MODE == 1
-        gpsFSM.setState(GPSState::REAL_FIX);
-    #else
-        gpsFSM.setState(GPSState::CONTINUOUS);
+    #ifdef TEST_GPS
+
+        Serial.println(F("[DEBUG] TEST_GPS"));
+
+        gpsFSM.begin();
+        gpsFSM.enable();
+
+        #if GPS_MOCK_MODE == 2
+            gpsFSM.setState(GPSState::MOCK_PARSE);
+        #elif GPS_MOCK_MODE == 1
+            gpsFSM.setState(GPSState::REAL_FIX);
+        #else
+            gpsFSM.setState(GPSState::CONTINUOUS);
+        #endif
+
+    #endif
+
+    // =====================================
+    // MPU6050 TEST
+    // =====================================
+
+    #ifdef TEST_MPU6050
+
+        Serial.println(F("[DEBUG] TEST_MPU6050"));
+
+        mpuFSM.begin();
+        mpuFSM.setState(MPUState::ACTIVE);
+
     #endif
 
     Serial.println();
@@ -177,29 +200,57 @@ void loop()
     // MODE_DEBUG
     // =====================================
 
+// =====================================
+// MODE_DEBUG
+// =====================================
+
 #ifdef MODE_DEBUG
 
-    gpsFSM.update();
+    // =====================================
+    // GPS TEST
+    // =====================================
 
-    if (gpsFSM.isURLReady())
-    {
-        Serial.println();
-        Serial.println(F("===================================="));
-        Serial.println(F("[MAIN] GPS URL READY"));
-        Serial.println(F("===================================="));
+    #ifdef TEST_GPS
 
-        Serial.print(F("[URL] "));
-        Serial.println(gpsFSM.getURL());
+        gpsFSM.update();
 
-        Serial.println(F("===================================="));
-        Serial.println();
+        if (gpsFSM.isURLReady())
+        {
+            Serial.println();
+            Serial.println(F("===================================="));
+            Serial.println(F("[MAIN] GPS URL READY"));
+            Serial.println(F("===================================="));
 
-        gpsFSM.reset();
-    }
+            Serial.print(F("[URL] "));
+            Serial.println(gpsFSM.getURL());
+
+            Serial.println(F("===================================="));
+            Serial.println();
+
+            gpsFSM.reset();
+        }
+
+    #endif
+
+    // =====================================
+    // MPU6050 TEST
+    // =====================================
+
+    #ifdef TEST_MPU6050
+
+        mpuFSM.update();
+
+        if (mpu.available())
+        {
+            Serial.print(F("[MPU DATA] "));
+            Serial.println(mpu.getData());
+        }
+
+    #endif
 
     delay(10);
 
-#endif // MODE_DEBUG
+#endif // MODE_DEBUGG
 
     // =====================================
     // MODE_TRACKER
