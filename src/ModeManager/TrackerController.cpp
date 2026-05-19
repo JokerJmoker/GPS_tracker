@@ -40,16 +40,28 @@ void TrackerController::begin()
 #ifdef MODE_SLEEP
 
     Serial.println(F("[TRACKER] MODE_SLEEP INIT"));
+    Serial.flush();
 
+    Serial.println(F("[TRACKER] disabling GPS..."));
     _gps->disable();
+    Serial.println(F("[TRACKER] GPS disabled OK"));
+    
+    Serial.println(F("[TRACKER] disabling GSM..."));
     _gsm->disable();
+    Serial.println(F("[TRACKER] GSM disabled OK"));
 
+    Serial.println(F("[TRACKER] initializing MPU..."));
     _mpu->begin();
+    Serial.println(F("[TRACKER] MPU begin OK"));
+    
+    Serial.println(F("[TRACKER] setting MPU state to LISTENING..."));
     _mpu->setState(MPUState::LISTENING);
+    Serial.println(F("[TRACKER] MPU state set OK"));
 
     _state = TrackerState::SLEEP_LISTENING;
 
     Serial.println(F("[TRACKER] ENTER SLEEP LISTENING"));
+    Serial.flush();
 
     return;
 #endif

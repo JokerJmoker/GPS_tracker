@@ -192,31 +192,30 @@ void setup()
     // =====================================
 
 #ifdef MODE_SLEEP
-    
     Serial.println(F("[SYSTEM] MODE_SLEEP"));
     
-    // Allocate FSM objects for SLEEP mode
+    // СОЗДАЕМ ОБЪЕКТЫ
     gpsFSM = new GPS_FSM(&gps);
+    if (gpsFSM == nullptr) {
+        Serial.println(F("[ERROR] Failed to create gpsFSM"));
+        while(1);
+    }
+    
     gsmFSM = new GSM_FSM(&gsm);
     mpuFSM = new MPU_FSM(&mpu);
     
-    // Create and initialize Tracker Controller
     trackerController = new TrackerController(gpsFSM, gsmFSM, mpuFSM);
+    if (trackerController == nullptr) {
+        Serial.println(F("[ERROR] Failed to create trackerController"));
+        while(1);
+    }
+    
     trackerController->begin();
     
-    Serial.println();
     Serial.println(F("[SYSTEM] READY_SLEEP"));
-    Serial.println();
-    
-    // 3 медленных вспышки = SLEEP mode active
-    for(int i = 0; i < 3; i++) {
-        digitalWrite(LED_BUILTIN, HIGH);
-        delay(200);
-        digitalWrite(LED_BUILTIN, LOW);
-        delay(200);
-    }
+    Serial.flush();
+#endif
 
-#endif // MODE_SLEEP
 
     // Final ready blink
     digitalWrite(LED_BUILTIN, HIGH);
