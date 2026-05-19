@@ -29,7 +29,7 @@
 #include "ModeManager/SystemModes.h"
 
 // =====================================================
-// TRACKER CONTROLLER (NEW)
+// TRACKER CONTROLLER
 // =====================================================
 
 #include "ModeManager/TrackerController.h"
@@ -39,17 +39,13 @@
 // =====================================================
 
 // -------------------------------------
-// GPS
-// RX = 3
-// TX = 4
+// GPS (RX = 3, TX = 4)
 // -------------------------------------
 
 GPS gps(3, 4);
 
 // -------------------------------------
-// GSM
-// RX = 5
-// TX = 6
+// GSM (RX = 5, TX = 6)
 // -------------------------------------
 
 GSM gsm(5, 6);
@@ -61,25 +57,19 @@ GSM gsm(5, 6);
 MPU mpu;
 
 // =====================================================
-// CREATE FSM
+// CREATE FSM (POINTERS FOR DYNAMIC ALLOCATION)
 // =====================================================
 
-GPS_FSM gpsFSM(&gps);
-GSM_FSM gsmFSM(&gsm);
-MPU_FSM mpuFSM(&mpu);
+GPS_FSM* gpsFSM = nullptr;
+GSM_FSM* gsmFSM = nullptr;
+MPU_FSM* mpuFSM = nullptr;
 
 // =====================================================
-// CREATE TRACKER CONTROLLER (for MODE_TRACKER)
+// TRACKER CONTROLLER (POINTER)
 // =====================================================
 
 #if defined(MODE_TRACKER) || defined(MODE_SLEEP)
-
-    TrackerController trackerController(
-        &gpsFSM,
-        &gsmFSM,
-        &mpuFSM
-    );
-
+    TrackerController* trackerController = nullptr;
 #endif
 
 // =====================================================
@@ -89,65 +79,85 @@ MPU_FSM mpuFSM(&mpu);
 void setup()
 {
     // =====================================
+    // LED INDICATOR (ALWAYS WORKS)
+    // =====================================
+    
+    pinMode(LED_BUILTIN, OUTPUT);
+    
+    // 5 вспышек = начало загрузки
+    for(int i = 0; i < 5; i++) {
+        digitalWrite(LED_BUILTIN, HIGH);
+        delay(100);
+        digitalWrite(LED_BUILTIN, LOW);
+        delay(100);
+    }
+    
+    // =====================================
     // SERIAL
     // =====================================
 
     Serial.begin(9600);
-
-    while (!Serial);
-
+    
+    // Таймаут для Serial (чтобы не зависать)
+    unsigned long start = millis();
+    while (!Serial && millis() - start < 2000);
+    
     Serial.println();
     Serial.println(F("===================================="));
     Serial.println(F("SYSTEM START"));
     Serial.println(F("===================================="));
-
+    
     // =====================================
     // SYSTEM MODES INIT
     // =====================================
 
     SystemModes::begin();
-
+    
     // =====================================
-    // MODE: DEBUG
+    // DYNAMIC ALLOCATION BASED ON MODE
     // =====================================
 
 #ifdef MODE_DEBUG
-
+    
     Serial.println(F("[SYSTEM] MODE_DEBUG"));
-
+    
+    // Allocate FSM objects for DEBUG mode
+    gpsFSM = new GPS_FSM(&gps);
+    gsmFSM = new GSM_FSM(&gsm);
+    mpuFSM = new MPU_FSM(&mpu);
+    
     // =====================================
     // GPS TEST
     // =====================================
-
+    
     #ifdef TEST_GPS
-
+    
         Serial.println(F("[DEBUG] TEST_GPS"));
-
-        gpsFSM.begin();
-        gpsFSM.enable();
-
+        
+        gpsFSM->begin();
+        gpsFSM->enable();
+        
         #if GPS_MOCK_MODE == 2
-            gpsFSM.setState(GPSState::MOCK_PARSE);
+            gpsFSM->setState(GPSState::MOCK_PARSE);
         #elif GPS_MOCK_MODE == 1
-            gpsFSM.setState(GPSState::REAL_FIX);
+            gpsFSM->setState(GPSState::REAL_FIX);
         #else
-            gpsFSM.setState(GPSState::CONTINUOUS);
+            gpsFSM->setState(GPSState::CONTINUOUS);
         #endif
-
+    
     #endif
-
+    
     // =====================================
     // MPU6050 TEST
     // =====================================
-
+    
     #ifdef TEST_MPU6050
-
+    
         Serial.println(F("[DEBUG] TEST_MPU6050"));
-
-        mpuFSM.begin();
-
+        mpuFSM->begin();
+    
     #endif
-
+    
     Serial.println();
     Serial.println(F("[SYSTEM] READY"));
     Serial.println();
@@ -159,17 +169,20 @@ void setup()
     // =====================================
 
 #ifdef MODE_TRACKER
-
-    Serial.println(F("[SYSTEM] MODE_TRACKER"));
-
-    // Initialize GPS FSM
-    //gpsFSM.begin();
     
-    // Initialize Tracker Controller (not GSM FSM directly!)
-    trackerController.begin();
-
+    Serial.println(F("[SYSTEM] MODE_TRACKER"));
+    
+    // Allocate FSM objects for TRACKER mode
+    gpsFSM = new GPS_FSM(&gps);
+    gsmFSM = new GSM_FSM(&gsm);
+    mpuFSM = new MPU_FSM(&mpu);
+    
+    // Create and initialize Tracker Controller
+    trackerController = new TrackerController(gpsFSM, gsmFSM, mpuFSM);
+    trackerController->begin();
+    
     Serial.println();
-    Serial.println(F("[SYSTEM] READY"));
+    Serial.println(F("[SYSTEM] READY_TRACKER"));
     Serial.println();
 
 #endif // MODE_TRACKER
@@ -179,17 +192,36 @@ void setup()
     // =====================================
 
 #ifdef MODE_SLEEP
-
+    
     Serial.println(F("[SYSTEM] MODE_SLEEP"));
-
-    trackerController.begin();
-
+    
+    // Allocate FSM objects for SLEEP mode
+    gpsFSM = new GPS_FSM(&gps);
+    gsmFSM = new GSM_FSM(&gsm);
+    mpuFSM = new MPU_FSM(&mpu);
+    
+    // Create and initialize Tracker Controller
+    trackerController = new TrackerController(gpsFSM, gsmFSM, mpuFSM);
+    trackerController->begin();
+    
     Serial.println();
     Serial.println(F("[SYSTEM] READY_SLEEP"));
     Serial.println();
+    
+    // 3 медленных вспышки = SLEEP mode active
+    for(int i = 0; i < 3; i++) {
+        digitalWrite(LED_BUILTIN, HIGH);
+        delay(200);
+        digitalWrite(LED_BUILTIN, LOW);
+        delay(200);
+    }
 
-#endif
+#endif // MODE_SLEEP
 
+    // Final ready blink
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(500);
+    digitalWrite(LED_BUILTIN, LOW);
 }
 
 // =====================================================
@@ -198,76 +230,76 @@ void setup()
 
 void loop()
 {
-    // =====================================
-    // MODE_DEBUG
-    // =====================================
-
-// =====================================
-// MODE_DEBUG
-// =====================================
-
 #ifdef MODE_DEBUG
-
+    
+    if (gpsFSM == nullptr) {
+        delay(10);
+        return;
+    }
+    
     // =====================================
     // GPS TEST
     // =====================================
-
+    
     #ifdef TEST_GPS
-
-        gpsFSM.update();
-
-        if (gpsFSM.isURLReady())
+    
+        gpsFSM->update();
+        
+        if (gpsFSM->isURLReady())
         {
             Serial.println();
             Serial.println(F("===================================="));
             Serial.println(F("[MAIN] GPS URL READY"));
             Serial.println(F("===================================="));
-
+            
             Serial.print(F("[URL] "));
-            Serial.println(gpsFSM.getURL());
-
+            Serial.println(gpsFSM->getURL());
+            
             Serial.println(F("===================================="));
             Serial.println();
-
-            gpsFSM.reset();
+            
+            gpsFSM->reset();
         }
-
+    
     #endif
-
+    
     // =====================================
     // MPU6050 TEST
     // =====================================
-
+    
     #ifdef TEST_MPU6050
-
-        mpuFSM.update();
-
-        if (mpuFSM.isAwaken())
-        {
-            Serial.println();
-            Serial.println(F("===================================="));
-            Serial.println(F("[SYSTEM] MOVEMENT DETECTED"));
-            Serial.println(F("===================================="));
-            Serial.println();
-
-            // emulate external handling
-            mpuFSM.setState(MPUState::DISABLED);
+    
+        if (mpuFSM != nullptr) {
+            mpuFSM->update();
+            
+            if (mpuFSM->isAwaken())
+            {
+                Serial.println();
+                Serial.println(F("===================================="));
+                Serial.println(F("[SYSTEM] MOVEMENT DETECTED"));
+                Serial.println(F("===================================="));
+                Serial.println();
+                
+                // emulate external handling
+                mpuFSM->setState(MPUState::DISABLED);
+            }
         }
-
+    
     #endif
-
+    
     delay(10);
 
-#endif // MODE_DEBUGG
+#endif // MODE_DEBUG
 
     // =====================================
     // MODE_TRACKER
     // =====================================
 
 #ifdef MODE_TRACKER
-
-    // Just call the tracker controller - it handles everything!
-    trackerController.update();
+    
+    if (trackerController != nullptr) {
+        trackerController->update();
+    }
     
     delay(50);
 
@@ -278,10 +310,21 @@ void loop()
     // =====================================
 
 #ifdef MODE_SLEEP
-
-    trackerController.update();
-
+    
+    if (trackerController != nullptr) {
+        trackerController->update();
+    }
+    
     delay(50);
+    
+    // Quick blink every 5 seconds to show it's alive (optional)
+    static unsigned long lastBlink = 0;
+    if (millis() - lastBlink > 5000) {
+        lastBlink = millis();
+        digitalWrite(LED_BUILTIN, HIGH);
+        delay(50);
+        digitalWrite(LED_BUILTIN, LOW);
+    }
 
-#endif
+#endif // MODE_SLEEP
 }

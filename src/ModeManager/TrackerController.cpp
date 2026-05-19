@@ -1,9 +1,10 @@
 // =====================================================
-// FILE: FILE: src/ModeManager/TrackerController.cpp
+// FILE: src/ModeManager/TrackerController.cpp
 // =====================================================
 
 #include "TrackerController.h"
 #include "Config.h"
+
 // =====================================================
 // CONSTRUCTOR
 // =====================================================
@@ -30,63 +31,74 @@ TrackerController::TrackerController(
 
 void TrackerController::begin()
 {
-    #ifdef MODE_TRACKER
+    Serial.println(F("[TRACKER] BEGIN"));
 
-        Serial.println(F("[TRACKER] MODE_TRACKER INIT"));
+    // reset flags
+    _gpsLatch = false;
+    _gsmLatch = false;
 
-        // MPU unused in tracker mode
-        _mpu->setState(MPUState::DISABLED);
+#ifdef MODE_SLEEP
 
-        // reset GPS FSM
-        _gps->reset();
+    Serial.println(F("[TRACKER] MODE_SLEEP INIT"));
 
-        // enable GPS
-        _gps->enable();
+    _gps->disable();
+    _gsm->disable();
 
-        // configure GPS mode
-        #if GPS_MOCK_MODE == 2
-            _gps->setState(GPSState::MOCK_PARSE);
-        #elif GPS_MOCK_MODE == 3
-            _gps->setState(GPSState::REAL_FIX);
-        #else
-            _gps->setState(GPSState::REAL_FIX);
-        #endif
+    _mpu->begin();
+    _mpu->setState(MPUState::LISTENING);
 
-        // configure GSM mode
-        #if GPS_MOCK_MODE == 2
-            _gsm->setMode(true);
-        #else
-            _gsm->setMode(false);
-        #endif
+    _state = TrackerState::SLEEP_LISTENING;
 
-        _state = TrackerState::GPS_ACTIVE;
+    Serial.println(F("[TRACKER] ENTER SLEEP LISTENING"));
 
-        Serial.println(F("[TRACKER] GPS ACTIVE"));
+    return;
+#endif
 
+#ifdef MODE_TRACKER
+
+    Serial.println(F("[TRACKER] MODE_TRACKER INIT"));
+
+    _mpu->setState(MPUState::DISABLED);
+
+    _gps->reset();
+    _gps->enable();
+
+    #if GPS_MOCK_MODE == 2
+        _gps->setState(GPSState::MOCK_PARSE);
+    #else
+        _gps->setState(GPSState::REAL_FIX);
     #endif
 
-    // ========== ДОБАВИТЬ ЭТОТ БЛОК ==========
-    #ifdef MODE_SLEEP
-        _state = TrackerState::SLEEP_LISTENING;
-        Serial.println(F("[TRACKER] FORCE SLEEP STATE"));
+    #if GPS_MOCK_MODE == 2
+        _gsm->setMode(true);
+    #else
+        _gsm->setMode(false);
     #endif
-    // =======================================
+
+    _state = TrackerState::GPS_ACTIVE;
+
+    Serial.println(F("[TRACKER] GPS ACTIVE"));
+
+#endif
 }
 
-
 // =====================================================
-// MAIN UPDATE
+// UPDATE
 // =====================================================
 
 void TrackerController::update()
 {
     switch (_state)
     {
-        // УДАЛИТЕ или ЗАКОММЕНТИРУЙТЕ этот case:
-        // case TrackerState::IDLE:
-        //     Serial.println(F("[TRACKER] IDLE -> START"));
-        //     _state = TrackerState::GPS_ACTIVE;
-        //     break;
+        case TrackerState::IDLE:
+            Serial.println(F("[TRACKER] IDLE -> AUTO START"));
+
+#ifdef MODE_SLEEP
+            _state = TrackerState::SLEEP_LISTENING;
+#else
+            _state = TrackerState::GPS_ACTIVE;
+#endif
+            break;
 
         case TrackerState::GPS_ACTIVE:
         case TrackerState::GPS_WAIT_FIX:
@@ -102,71 +114,52 @@ void TrackerController::update()
             processCooldown();
             break;
 
-        #ifdef MODE_SLEEP
+#ifdef MODE_SLEEP
         case TrackerState::SLEEP_LISTENING:
             processSleepListening();
             break;
-        #endif
+#endif
 
         default:
-            Serial.println(F("[TRACKER] UNKNOWN STATE"));
+            Serial.println(F("[TRACKER] UNKNOWN STATE -> RESET"));
             resetCycle();
             break;
     }
 }
+
 // =====================================================
-// RESET CYCLE (SAFE ENTRY POINT)
+// RESET CYCLE
 // =====================================================
 
 void TrackerController::resetCycle()
 {
     Serial.println(F("[TRACKER] RESET CYCLE"));
 
-    // =====================================
-    // DISABLE MODULES
-    // =====================================
-
     _gps->disable();
     _gsm->disable();
-
-    // =====================================
-    // RESET FSM
-    // =====================================
 
     _gps->reset();
     _gsm->reset();
 
-    // =====================================
-    // RESET FLAGS
-    // =====================================
-
     _gpsLatch = false;
     _gsmLatch = false;
 
-    // =====================================
-    // MODE_SLEEP
-    // =====================================
+#ifdef MODE_SLEEP
 
-    #ifdef MODE_SLEEP
+    Serial.println(F("[TRACKER] BACK TO SLEEP LISTENING"));
 
-        Serial.println(F("[TRACKER] RETURN TO MPU LISTENING"));
+    _mpu->setState(MPUState::LISTENING);
 
-        _mpu->setState(MPUState::LISTENING);
+    _state = TrackerState::SLEEP_LISTENING;
 
-        _state = TrackerState::SLEEP_LISTENING;
+#else
 
-    #else
+    _state = TrackerState::WAIT_NEXT_CYCLE;
 
-        // =====================================
-        // MODE_TRACKER
-        // =====================================
+    _cycleCounter++;
+    _cycleCooldownStart = millis();
 
-        _state = TrackerState::WAIT_NEXT_CYCLE;
-
-        _cycleCounter++;
-        _cycleCooldownStart = millis();
-
-    #endif
+#endif
 }
 
 // =====================================================
@@ -177,24 +170,16 @@ void TrackerController::processGPS()
 {
     _gps->update();
 
-    // -------------------------
-    // ENTER STATE ONCE
-    // -------------------------
     if (!_gpsLatch)
     {
         _gpsLatch = true;
-
         _gpsStartTime = millis();
-
         Serial.println(F("[TRACKER] GPS ACTIVE"));
     }
 
-    // -------------------------
-    // FIX RECEIVED (EDGE EVENT)
-    // -------------------------
     if (_gps->hasFix())
     {
-        if (_gsmLatch) return; // защита от повторного входа
+        if (_gsmLatch) return;
 
         Serial.println(F("[TRACKER] GPS FIX RECEIVED"));
 
@@ -204,19 +189,16 @@ void TrackerController::processGPS()
         _gsm->setURL(_gps->getURL());
 
         _gsmLatch = true;
+
         _state = TrackerState::GSM_ACTIVE;
         _gsmStartTime = millis();
 
         return;
     }
 
-    // -------------------------
-    // TIMEOUT
-    // -------------------------
     if (millis() - _gpsStartTime > GPS_TIMEOUT)
     {
         Serial.println(F("[TRACKER] GPS TIMEOUT"));
-
         resetCycle();
     }
 }
@@ -229,36 +211,23 @@ void TrackerController::processGSM()
 {
     _gsm->update();
 
-    // -------------------------
-    // ENTER STATE ONCE
-    // -------------------------
     if (_state == TrackerState::GSM_ACTIVE)
     {
         Serial.println(F("[TRACKER] GSM SEND START"));
-
         _state = TrackerState::GSM_WAIT_RESPONSE;
     }
 
-    // -------------------------
-    // DONE
-    // -------------------------
     if (_gsm->isDone())
     {
         Serial.println(F("[TRACKER] GSM DONE"));
-
         _gsm->disable();
-
         resetCycle();
         return;
     }
 
-    // -------------------------
-    // TIMEOUT
-    // -------------------------
     if (millis() - _gsmStartTime > GSM_TIMEOUT)
     {
         Serial.println(F("[TRACKER] GSM TIMEOUT"));
-
         resetCycle();
     }
 }
@@ -270,150 +239,62 @@ void TrackerController::processGSM()
 void TrackerController::processCooldown()
 {
     if (millis() - _cycleCooldownStart < CYCLE_DELAY)
-    {
         return;
-    }
 
     Serial.println(F("[TRACKER] NEW CYCLE START"));
 
-    // =====================================
-    // RESET FSM
-    // =====================================
-
     _gps->reset();
-
-
-    //Reset and reconfigure GSM
     _gsm->reset();
-    
-    #if GPS_MOCK_MODE == 2
-        _gsm->setMode(true);  // Mock mode
-    #else
-        _gsm->setMode(false); // Real mode
-    #endif
-
-    // =====================================
-    // ENABLE GPS
-    // =====================================
 
     _gps->enable();
 
-    // =====================================
-    // RESTORE GPS MODE
-    // =====================================
-
-    #if GPS_MOCK_MODE == 2
-
-        _gps->setState(GPSState::MOCK_PARSE);
-
-    #elif GPS_MOCK_MODE == 3
-
-        _gps->setState(GPSState::REAL_FIX);
-
-    #else
-
-        _gps->setState(GPSState::REAL_FIX);
-
-    #endif
-
-    // =====================================
-    // RESET FLAGS
-    // =====================================
+#if GPS_MOCK_MODE == 2
+    _gsm->setMode(true);
+    _gps->setState(GPSState::MOCK_PARSE);
+#else
+    _gsm->setMode(false);
+    _gps->setState(GPSState::REAL_FIX);
+#endif
 
     _gpsLatch = false;
     _gsmLatch = false;
-
-    // =====================================
-    // NEXT STATE
-    // =====================================
 
     _state = TrackerState::GPS_ACTIVE;
 }
 
 // =====================================================
-// TIMER
-// =====================================================
-
-unsigned long TrackerController::getCycleDelay() const
-{
-#ifdef MODE_DEBUG
-
-    // DEBUG MODE BEHAVIOR
-    #if GPS_MOCK_MODE == 2
-        return 5000;   // 5s fast loop spam mode
-    #elif GPS_MOCK_MODE == 1
-        return 0;      // instant loop (continuous)
-    #else
-        return 3000;
-    #endif
-
-#elif defined(MODE_TRACKER)
-
-    // TRACKER MODE BEHAVIOR
-    #if GPS_MOCK_MODE == 2
-        return 10000;  // 10s cycle
-    #elif GPS_MOCK_MODE == 3
-        return 15000;  // 15s cycle
-    #else
-        return 10000;
-    #endif
-
-#else
-
-    return 10000;
-
-#endif
-}
-
-
-// =====================================================
 // SLEEP LISTENING
 // =====================================================
 
+#ifdef MODE_SLEEP
 void TrackerController::processSleepListening()
 {
     if (_mpu == nullptr)
-    {
         return;
-    }
 
     _mpu->update();
-
-    // =====================================
-    // MOVEMENT DETECTED
-    // =====================================
 
     if (_mpu->isAwaken())
     {
         Serial.println(F("[TRACKER] MPU AWAKEN"));
 
-        // disable MPU during GPS/GSM cycle
         _mpu->setState(MPUState::DISABLED);
 
-        // reset GPS
         _gps->reset();
-
-        // enable GPS
         _gps->enable();
 
-        // configure GPS state
-        #if GPS_MOCK_MODE == 2
-
-            _gps->setState(GPSState::MOCK_PARSE);
-
-        #else
-
-            _gps->setState(GPSState::REAL_FIX);
-
-        #endif
+#if GPS_MOCK_MODE == 2
+        _gps->setState(GPSState::MOCK_PARSE);
+#else
+        _gps->setState(GPSState::REAL_FIX);
+#endif
 
         _gpsLatch = false;
         _gsmLatch = false;
 
         _state = TrackerState::GPS_ACTIVE;
 
-        Serial.println(F("[TRACKER] GPS STARTED"));
+        Serial.println(F("[TRACKER] WAKE -> GPS START"));
     }
 }
-
-
+#endif
