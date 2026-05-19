@@ -8,27 +8,27 @@
 
 ```
 src/
-├── ModeManager/           # Управление режимами работы
-│   ├── SystemModes.cpp    # Система режимов (DEBUG/TRACKER/SLEEP)
-│   ├── SystemModes.h
-│   ├── TrackerController.cpp  # Контроллер логики трекера
-│   └── TrackerController.h
-├── MPU/                   # Датчик движения MPU6050
-│   ├── MPU.cpp
-│   └── MPU.h
-├── NEO/                   # GPS модуль (NEO-6M/7M/8M)
-│   ├── NEO.cpp
-│   ├── NEO.h
-│   ├── GPSParser.cpp     # Парсинг GPS данных (TinyGPS++)
-│   └── GPSParser.h
-├── SIM/                   # GSM модуль (SIM800L)
-│   ├── SIM.cpp
-│   └── SIM.h
-├── TestManager/           # Режим отладки
-│   ├── TestManager.cpp
-│   └── TestManager.h
-└── main.cpp               # Главный файл программы
-----Config.h 
+├── GPS/                    # GPS модуль (NMEA парсинг)
+│   ├── GPS.cpp/.h         # Драйвер UART для GPS
+│   └── GPS_FSM.cpp/.h     # Конечный автомат GPS
+│   └── GPSParser.cpp/.h   # Парсер NMEA строк (ОЧЕНЬ ВАЖЕН!)
+│
+├── GSM/                    # GSM/SIM модуль (AT команды)
+│   ├── GSM.cpp/.h         # Драйвер UART для GSM
+│   └── GSM_FSM.cpp/.h     # Конечный автомат GSM
+│
+├── MPU/                    # MPU6050 модуль (акселерометр)
+│   ├── MPU.cpp/.h         # I2C драйвер MPU6050
+│   └── MPU_FSM.cpp/.h     # Конечный автомат MPU (детекция движения)
+│
+├── ModeManager/            # Управление режимами
+│   ├── TrackerController.cpp/.h   # Главный контроллер (GPS+GSM цикл)
+│   └── SystemModes.cpp/.h         # Системные режимы (DEBUG/TRACKER/SLEEP)
+│
+├── TestManager/            # Тестовые модули (пока пусто)
+│
+├── Config.h                # Глобальные настройки и макросы
+└── main.cpp               # Точка входа
 
 test/                      # Тесты
 platformio.ini             # Конфигурация PlatformIO
