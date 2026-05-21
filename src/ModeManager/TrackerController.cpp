@@ -3,7 +3,7 @@
 // =====================================================
 
 #include "TrackerController.h"
-#include "Config.h"
+#include "Config/Config.h"
 
 // =====================================================
 // CONSTRUCTOR

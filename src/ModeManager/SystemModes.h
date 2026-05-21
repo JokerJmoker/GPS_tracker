@@ -107,6 +107,12 @@ class SystemModes {
     // Принудительный полный сброс всех состояний
     // Более жёсткий, чем resetTrackerCycle() - сбрасывает абсолютно всё
     static void forceReset();
+
+    // Принудительное обновление режима (для кнопки)
+    static void forceModeUpdate(OperationMode mode) {
+      _currentMode = mode;
+      indicateModeChange();
+}
 };
 
 #endif
