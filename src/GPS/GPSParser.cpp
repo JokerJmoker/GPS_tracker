@@ -83,7 +83,7 @@ void buildYandexURL(float lat, float lon, char* out, int size) {
     dtostrf(lon, 0, 6, lonBuf);
     
     snprintf(out, size,
-        "http://ymaps/?ll=%s,%s",  // Короткий URL!
+        "https://yandex.ru/maps/?pt=%s,%s&z=17",  // Короткий URL!
         lonBuf,
         latBuf
     );
